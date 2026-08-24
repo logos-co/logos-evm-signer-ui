@@ -1,0 +1,27 @@
+{
+  "name": "signer_ui",
+  "version": "1.0.0",
+  "type": "ui_qml",
+  "interface": "universal",
+  "category": "wallet",
+  "description": "The signing approval surface: shows what a module asked to sign, in the keystore's own words, and takes the vault password.",
+  "main": "signer_ui_plugin",
+  "icon": null,
+  "view": "qml/SignerView.qml",
+  "dependencies": ["keystore_module"],
+  "codegen": { "rep": "src/signer_ui.rep" },
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": ["qt6.qtdeclarative"]
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}

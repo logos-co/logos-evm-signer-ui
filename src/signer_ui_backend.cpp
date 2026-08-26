@@ -3,6 +3,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QScopeGuard>
 
 #include "logos_sdk.h"
 
@@ -39,12 +40,22 @@ void SignerUiBackend::onContextReady()
     // when ui-host has handed this plugin its LogosAPI, so the typed dependency
     // surface is live. module-builder's ui-typed-backend example does exactly
     // this.
-    modules().keystore_module.onApproval_offered([this](QString) { refresh(); });
+    // An event callback runs ON THE IPC READ STACK. A synchronous outbound call
+    // made from here re-enters that stack and blocks the very thread that would
+    // deliver its reply, so the call cannot complete and dies on its timeout --
+    // measured as "keystore_module.pending timed out after 20000ms", repeatedly,
+    // while the events themselves arrived perfectly well. Hop to the event loop
+    // first so the call runs on a clean stack.
+    //
+    // Note this is about EVENT CALLBACKS specifically. onContextReady is a
+    // normal place to call out from and needs no such treatment -- that is the
+    // documented pattern, and arming these subscriptions from there is fine.
+    modules().keystore_module.onApproval_offered([this](QString) { refreshSoon(); });
     modules().keystore_module.onApproval_settled([this](QString handle, QString) {
         if (handle == renderedHandle()) {
             clearRendered();
         }
-        refresh();
+        refreshSoon();
     });
 
     m_poll.start(kPollMs);
@@ -52,14 +63,42 @@ void SignerUiBackend::onContextReady()
     setStatusText(QStringLiteral("Ready"));
 }
 
+void SignerUiBackend::refreshSoon()
+{
+    QTimer::singleShot(0, this, [this] { refresh(); });
+}
+
 void SignerUiBackend::refresh()
 {
+    // pending() is synchronous and can block for as long as its timeout. The
+    // poll timer must not stack a second one behind a call that is still in
+    // flight, or every tick adds another 20s of queued work.
+    if (m_inFlight) {
+        return;
+    }
+    m_inFlight = true;
+    const auto done = qScopeGuard([this] { m_inFlight = false; });
+
     const QJsonObject reply = parseObject(modules().keystore_module.pending());
     if (!reply.value(QStringLiteral("ok")).toBool()) {
-        // The commonest cause is not being the configured approver, which is a
-        // deployment fact rather than a transient error — say so plainly.
-        setLastError(QStringLiteral("This build is not registered as the approver."));
-        setStatusText(QStringLiteral("Not the approver"));
+        // Distinguish "the keystore refused us" from "we never reached the
+        // keystore". Collapsing the two is not a cosmetic sin: a transport
+        // timeout reported as "not the approver" sends whoever reads it hunting
+        // an authorization problem that does not exist. The keystore's own
+        // refusal is the exact string "not authorized"; anything else here --
+        // an empty reply, a timeout, unparseable JSON -- is the call failing.
+        const QString err = reply.value(QStringLiteral("error")).toString();
+        if (err == QStringLiteral("not authorized")) {
+            setLastError(QStringLiteral(
+                "This build is not registered as the approver, so it cannot show "
+                "or approve signing requests."));
+            setStatusText(QStringLiteral("Not the approver"));
+        } else {
+            setLastError(QStringLiteral("Could not reach the keystore%1")
+                             .arg(err.isEmpty() ? QStringLiteral(".")
+                                                : QStringLiteral(": %1").arg(err)));
+            setStatusText(QStringLiteral("Keystore unreachable"));
+        }
         return;
     }
     setLastError(QString());

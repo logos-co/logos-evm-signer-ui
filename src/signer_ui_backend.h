@@ -33,6 +33,13 @@ protected:
 private:
     void clearRendered();
     void startDwell();
+    /// Refresh on a clean event-loop stack. Use this from event callbacks:
+    /// calling out synchronously from an IPC callback deadlocks the reply.
+    void refreshSoon();
+
+    /// Guards against the poll timer stacking a refresh behind one that is
+    /// still blocked in a synchronous call.
+    bool m_inFlight = false;
 
     // Guards against a render painted into a hidden or just-appeared sheet
     // being approved by a click that was already travelling.

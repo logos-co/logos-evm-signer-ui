@@ -32,6 +32,13 @@ const MESSAGE: &str = "I authorise the doc-test transfer";
 /// a CLI — Basecamp has none.
 const MARK: &str = "SIGNER_PROBE";
 
+/// What a requester tells the user when an offer expires unacknowledged. The
+/// keystore's `expired_no_ack` is a protocol fact; this is the human sentence
+/// it means. Signing requires the Signer to be open — that is the design, not
+/// a limitation to apologise for — so the guidance is simply to open it.
+const NEEDS_APPROVER_MESSAGE: &str =
+    "No signer is listening. Open the Signer app to approve this request.";
+
 pub trait SignerProbeModule: Send + 'static {
     /// What the probe has got so far — `{ ok, state, address?, handle?, signed? }`.
     /// Ungated on purpose: it is a fixture, and it holds no secret worth gating.
@@ -95,6 +102,7 @@ fn drive(state: Shared) {
     .to_string();
 
     let mut announced = false;
+    let mut needs_approver = false;
     for _ in 0..600 {
         let (handle, receipt) = match ok_value(modules().keystore_module.request_approval(&intent)) {
             Ok(v) => (
@@ -133,9 +141,25 @@ fn drive(state: Shared) {
         }
 
         if outcome == "expired_no_ack" || outcome.is_empty() {
-            // Nobody acknowledged. Offer again — the human may still be on
-            // their way to the Signer tab.
-            set!(json!({ "ok": true, "state": "waiting_for_approver", "address": address }));
+            // Nobody acknowledged inside ACK_DEADLINE, which means no approver
+            // is listening. This is the ONE case a requester must surface to
+            // the user, because it is the one they can fix: the Signer has to
+            // be open for a signature to be possible at all. Say that, once,
+            // and keep offering so it succeeds the moment they open it.
+            if !needs_approver {
+                needs_approver = true;
+                println!("{MARK}_NEEDS_APPROVER: {NEEDS_APPROVER_MESSAGE}");
+            }
+            set!(json!({
+                "ok": true,
+                "state": "waiting_for_approver",
+                "address": address,
+                // What a real requester's UI binds to. The keystore reports
+                // `expired_no_ack`; turning that into something a human can act
+                // on is the requester's job, not the signer's.
+                "needs_approver": true,
+                "message": NEEDS_APPROVER_MESSAGE
+            }));
             continue;
         }
         if outcome != "approved" {

@@ -30,34 +30,26 @@ void SignerUiBackend::onContextReady()
     QObject::connect(&m_dwell, &QTimer::timeout, [this] { setDwellElapsed(true); });
     QObject::connect(&m_poll, &QTimer::timeout, [this] { refresh(); });
 
-    // NOTHING may call out synchronously from here.
+    // Subscribe FIRST, then reconcile. The other order loses any request
+    // created between the snapshot and the subscription becoming live; this
+    // order can only ever produce a duplicate, which the queue de-dupes by
+    // handle.
     //
-    // onContextReady runs inside the ui-host's startup handshake. An outbound
-    // call made on this stack — a subscription is one — re-enters the host
-    // while it is still waiting for this process to report ready, so the
-    // handshake misses its deadline and the ui-host is killed. The symptom is
-    // brutally unhelpful: the backend process appears, exits seconds later,
-    // the view never attaches, and nothing is logged. Deferring to the event
-    // loop costs one turn of latency and removes the whole class.
-    QTimer::singleShot(0, this, [this] {
-        // Subscribe FIRST, then reconcile. The other order loses any request
-        // created between the snapshot and the subscription becoming live;
-        // this order can only ever produce a duplicate, which the queue
-        // de-dupes by handle.
-        modules().keystore_module.onApproval_offered([this](QString) { refresh(); });
-        modules().keystore_module.onApproval_settled([this](QString handle, QString) {
-            if (handle == renderedHandle()) {
-                clearRendered();
-            }
-            refresh();
-        });
-
-        m_poll.start(kPollMs);
+    // Arming subscriptions here is the documented pattern: onContextReady fires
+    // when ui-host has handed this plugin its LogosAPI, so the typed dependency
+    // surface is live. module-builder's ui-typed-backend example does exactly
+    // this.
+    modules().keystore_module.onApproval_offered([this](QString) { refresh(); });
+    modules().keystore_module.onApproval_settled([this](QString handle, QString) {
+        if (handle == renderedHandle()) {
+            clearRendered();
+        }
         refresh();
-        setStatusText(QStringLiteral("Ready"));
     });
 
-    setStatusText(QStringLiteral("Connecting"));
+    m_poll.start(kPollMs);
+    refresh();
+    setStatusText(QStringLiteral("Ready"));
 }
 
 void SignerUiBackend::refresh()

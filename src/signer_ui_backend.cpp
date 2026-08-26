@@ -2,6 +2,7 @@
 
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QDateTime>
 #include <QJsonObject>
 #include <QScopeGuard>
 
@@ -17,6 +18,9 @@ constexpr int kDwellMs = 500;
 
 /// The queue backstop. Events are the fast path.
 constexpr int kPollMs = 1000;
+
+/// How long an "Approved" confirmation survives the queue poll.
+constexpr int kConfirmSeconds = 30;
 
 QJsonObject parseObject(const QString &raw)
 {
@@ -104,6 +108,13 @@ void SignerUiBackend::refresh()
     setLastError(QString());
     const QJsonArray items = reply.value(QStringLiteral("pending")).toArray();
     setPendingJson(QString::fromUtf8(QJsonDocument(items).toJson(QJsonDocument::Compact)));
+    // A confirmation outlives the next poll. Without this the "Approved — …"
+    // line survives for under a second before the 1s queue poll overwrites it
+    // with "Nothing to approve", so the one message the human actually waited
+    // for is the one they never see.
+    if (m_confirmUntil.isValid() && QDateTime::currentDateTimeUtc() < m_confirmUntil) {
+        return;
+    }
     setStatusText(items.isEmpty() ? QStringLiteral("Nothing to approve")
                                   : QStringLiteral("%1 waiting").arg(items.size()));
 
@@ -174,6 +185,17 @@ bool SignerUiBackend::approve(QString handle, QString bundleId, QString password
     password.fill(QChar(0));
 
     const bool ok = r.value(QStringLiteral("ok")).toBool();
+    if (ok) {
+        // Confirm what was authorised. approve() answers with a COUNT, never the
+        // signatures — the approver causes them to exist and never sees them,
+        // because only the requester can collect them with its receipt. Showing
+        // the count is the most this surface can honestly report, and a human
+        // who just typed a vault password deserves to be told it worked.
+        const int n = r.value(QStringLiteral("signed_count")).toInt();
+        setStatusText(n == 1 ? QStringLiteral("Approved — 1 item signed")
+                             : QStringLiteral("Approved — %1 items signed").arg(n));
+        m_confirmUntil = QDateTime::currentDateTimeUtc().addSecs(kConfirmSeconds);
+    }
     if (!ok) {
         // Deliberately generic: the keystore does not distinguish a wrong
         // password from a stale commitment, and neither should this.

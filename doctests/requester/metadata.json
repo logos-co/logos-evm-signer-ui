@@ -1,0 +1,21 @@
+{
+  "name": "signer_probe",
+  "version": "1.0.0",
+  "description": "Doc-test fixture: a Tier B requester. Imports a known key, asks the keystore for a signature, and prints the signature once a human approves it.",
+  "author": "Logos Core Team",
+  "type": "core",
+  "interface": "cdylib",
+  "category": "test",
+  "main": "signer_probe_plugin",
+  "dependencies": ["keystore_module"],
+  "include": [],
+  "capabilities": [],
+  "codegen": {
+    "rust": { "crate": "rust-lib", "trait": "SignerProbeModule", "source": "src/glue.rs" }
+  },
+  "nix": {
+    "external_libraries": [],
+    "packages": { "build": [], "runtime": [] },
+    "cmake": { "find_packages": [], "extra_include_dirs": [] }
+  }
+}

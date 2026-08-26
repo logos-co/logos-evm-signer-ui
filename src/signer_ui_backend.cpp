@@ -28,24 +28,36 @@ void SignerUiBackend::onContextReady()
 {
     m_dwell.setSingleShot(true);
     QObject::connect(&m_dwell, &QTimer::timeout, [this] { setDwellElapsed(true); });
+    QObject::connect(&m_poll, &QTimer::timeout, [this] { refresh(); });
 
-    // Subscribe FIRST, then reconcile. The other order loses any request
-    // created between the snapshot and the subscription becoming live; this
-    // order can only ever produce a duplicate, which the queue de-dupes by
-    // handle.
-    modules().keystore_module.onApproval_offered([this](QString) { refresh(); });
-    modules().keystore_module.onApproval_settled([this](QString handle, QString) {
-        if (handle == renderedHandle()) {
-            clearRendered();
-        }
+    // NOTHING may call out synchronously from here.
+    //
+    // onContextReady runs inside the ui-host's startup handshake. An outbound
+    // call made on this stack — a subscription is one — re-enters the host
+    // while it is still waiting for this process to report ready, so the
+    // handshake misses its deadline and the ui-host is killed. The symptom is
+    // brutally unhelpful: the backend process appears, exits seconds later,
+    // the view never attaches, and nothing is logged. Deferring to the event
+    // loop costs one turn of latency and removes the whole class.
+    QTimer::singleShot(0, this, [this] {
+        // Subscribe FIRST, then reconcile. The other order loses any request
+        // created between the snapshot and the subscription becoming live;
+        // this order can only ever produce a duplicate, which the queue
+        // de-dupes by handle.
+        modules().keystore_module.onApproval_offered([this](QString) { refresh(); });
+        modules().keystore_module.onApproval_settled([this](QString handle, QString) {
+            if (handle == renderedHandle()) {
+                clearRendered();
+            }
+            refresh();
+        });
+
+        m_poll.start(kPollMs);
         refresh();
+        setStatusText(QStringLiteral("Ready"));
     });
 
-    QObject::connect(&m_poll, &QTimer::timeout, [this] { refresh(); });
-    m_poll.start(kPollMs);
-
-    refresh();
-    setStatusText(QStringLiteral("Ready"));
+    setStatusText(QStringLiteral("Connecting"));
 }
 
 void SignerUiBackend::refresh()

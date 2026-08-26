@@ -55,7 +55,7 @@ sections:
 
       - title: "The keystore, the signer UI, and the requester"
         run: |
-          nix build 'github:logos-co/logos-evm-keystore-module#install' -o result-keystore
+          nix build 'github:logos-co/logos-evm-keystore-module{release}#install' -o result-keystore
           nix build 'github:logos-co/logos-evm-signer-ui{release}#install' -o result-signer
           nix build 'github:logos-co/logos-evm-signer-ui{release}?dir=doctests/requester#install' -o result-probe
           nix build 'github:logos-co/logos-capability-module#install' -o result-capability
@@ -102,12 +102,19 @@ sections:
         listens when this is set.
     steps:
       - title: "Launch, approve, and collect the signature"
-        launch: "./result-app/bin/logos-standalone-app -p ./tree/plugins/signer_ui -m ./tree/modules --load signer_probe -u ./userdir"
+        # The two environment variables are set inline, not as a separate `env:`
+        # block, because the runner does not carry one — and neither is optional:
+        #   QML_INSPECTOR_PORT   the QML inspector is compiled in but only
+        #                        listens when this is set, so without it qt-mcp
+        #                        has nothing to connect to.
+        #   QT_FORCE_STDERR_LOGGING  Qt prefers journald where it is available,
+        #                        so without it a failure in this app prints
+        #                        NOTHING — not the QML error, not the ui-host
+        #                        timeout. An absent warning then reads as a
+        #                        passed check.
+        launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 ./result-app/bin/logos-standalone-app -p ./tree/plugins/signer_ui -m ./tree/modules --load signer_probe -u ./userdir"
         qt_mcp: "result-mcp"
         launch_timeout: 600
-        env:
-          QT_FORCE_STDERR_LOGGING: "1"
-          QML_INSPECTOR_PORT: "3768"
         tests:
           - name: "The signer UI connects to its backend"
             action: wait_for
@@ -187,7 +194,7 @@ sections:
           "not supported on this platform" warning and simply never loads.
         run: |
           nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' -o result-basecamp
-          nix build 'github:logos-co/logos-evm-keystore-module#install-portable' -o result-keystore-p
+          nix build 'github:logos-co/logos-evm-keystore-module{release}#install-portable' -o result-keystore-p
           nix build 'github:logos-co/logos-evm-signer-ui{release}#install-portable' -o result-signer-p
           mkdir -p bctree/modules bctree/plugins
           cp -r result-keystore-p/modules/* bctree/modules/
@@ -202,11 +209,9 @@ sections:
           - "linux-amd64"
 
       - title: "It loads and renders in the shell"
-        launch: "./result-basecamp/bin/LogosBasecamp --user-dir ./bctree"
+        launch: "env QT_FORCE_STDERR_LOGGING=1 ./result-basecamp/bin/LogosBasecamp --user-dir ./bctree"
         qt_mcp: "result-mcp"
         launch_timeout: 600
-        env:
-          QT_FORCE_STDERR_LOGGING: "1"
         tests:
           - name: "The signer surface is up inside Basecamp"
             # Basecamp opens the installed app and the inspector attaches to its

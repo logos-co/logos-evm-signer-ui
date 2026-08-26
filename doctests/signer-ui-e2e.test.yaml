@@ -178,6 +178,18 @@ sections:
               find_value: "vaultPasswordField"
               value: "doctest-pw"
 
+            - name: "Approve arms only after the dwell"
+              # The button's label IS the state: it reads "Reading…" until the
+              # sheet has been up for the dwell period, and the backend refuses
+              # an early approval regardless of what the view believes. Waiting
+              # for the label is therefore both the precondition and the
+              # assertion -- and it is deterministic, unlike a sleep. macOS
+              # clicked before the dwell fired and got
+              # "No clickable element found with text 'Approve'".
+              action: wait_for
+              texts: ["Approve"]
+              timeout: 10000
+
             - name: "Approve"
               # `click` matches by TEXT, and text matching is substring-based, so
               # nothing else on screen may contain this word. The requester's
@@ -259,12 +271,31 @@ sections:
           qt_mcp: "result-mcp"
           launch_timeout: 600
           tests:
-            - name: "The signer surface is up inside Basecamp"
-              # Basecamp opens the installed app and the inspector attaches to its
-              # widget. Reaching this text means the plugin loaded, its backend was
-              # admitted, and its QML compiled under Basecamp's sandbox.
+            - name: "The shell is up"
               action: wait_for
-              texts: ["Refresh", "No signing requests are waiting."]
+              texts: ["Workspace"]
+              timeout: 30000
+
+            - name: "Open the Signer from the sidebar"
+              # Nothing opens an app on its own: Basecamp loads a ui_qml plugin
+              # only when its tile is clicked, and its dependencies with it. The
+              # earlier version of this section asserted "Refresh" and passed
+              # without ever opening the plugin -- "Refresh" also matches shell
+              # chrome, so it was a false positive on a view that was not there.
+              action: click
+              target: "Workspace"
+
+            - name: "Launch it"
+              action: click
+              target: "signer_ui"
+
+            - name: "The signer surface is up inside Basecamp"
+              # Plugin-specific text, so it cannot match the shell. Reaching it
+              # means the plugin loaded, its backend was admitted, and its QML
+              # compiled under Basecamp's sandbox -- which is the whole of what
+              # this section claims.
+              action: wait_for
+              texts: ["No signing requests are waiting."]
               timeout: 45000
               screenshot: "signer-ui-basecamp.png"
 

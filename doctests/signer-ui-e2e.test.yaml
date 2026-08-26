@@ -133,63 +133,65 @@ sections:
         #                        NOTHING — not the QML error, not the ui-host
         #                        timeout. An absent warning then reads as a
         #                        passed check.
-        launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 ./result-app/bin/logos-standalone-app -p ./tree/plugins/signer_ui -m ./tree/modules --load signer_probe -u ./userdir"
-        qt_mcp: "result-mcp"
-        launch_timeout: 600
-        tests:
-          - name: "The signer UI connects to its backend"
-            action: wait_for
-            texts: ["Refresh"]
-            timeout: 60000
+        ui_test:
+          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 ./result-app/bin/logos-standalone-app -p ./tree/plugins/signer_ui -m ./tree/modules --load signer_probe -u ./userdir"
+          qt_mcp: "result-mcp"
+          launch_timeout: 600
+          tests:
+            - name: "The signer UI connects to its backend"
+              action: wait_for
+              texts: ["Refresh"]
+              timeout: 60000
 
-          - name: "The keystore parks the request and the UI claims it"
-            # `acknowledge` means 'this approver has it on screen', not 'the human
-            # decided' — the UI claims receipt itself, because the keystore gives
-            # an approver only 3s and gives the human no deadline at all.
-            action: wait_for
-            texts: ["Requested by: signer_probe"]
-            timeout: 120000
+            - name: "The keystore parks the request and the UI claims it"
+              # `acknowledge` means 'this approver has it on screen', not 'the human
+              # decided' — the UI claims receipt itself, because the keystore gives
+              # an approver only 3s and gives the human no deadline at all.
+              action: wait_for
+              texts: ["Requested by: signer_probe"]
+              timeout: 120000
 
-          - name: "The human is shown the keystore's own words, not the requester's"
-            action: wait_for
-            texts:
-              - "Account: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-              - "Commitment:"
-              - "Text: I authorise the doc-test transfer"
-            timeout: 60000
+            - name: "The human is shown the keystore's own words, not the requester's"
+              action: wait_for
+              texts:
+                - "Account: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+                - "Commitment:"
+                - "Text: I authorise the doc-test transfer"
+              timeout: 60000
+              screenshot: "signer-ui-approval.png"
 
-          - name: "Screenshot of the approval surface"
-            screenshot: "signer-ui-approval.png"
+            - name: "Type the vault password"
+              action: set_text
+              find_by: "objectName"
+              find_value: "vaultPasswordField"
+              value: "doctest-pw"
 
-          - name: "Type the vault password"
-            action: set_text
-            find_by: { type: "LogosTextField" }
-            value: "doctest-pw"
+            - name: "Approve"
+              # `click` matches by TEXT, and text matching is substring-based, so
+              # nothing else on screen may contain this word. The requester's
+              # purpose line used to read "...approves a real signature" and this
+              # click landed on the queue row instead of the button; the purpose
+              # was reworded rather than the click made cleverer.
+              action: click
+              target: "Approve"
 
-          - name: "Approve"
-            # By objectId/type, never by the text 'Approve': the queue row's
-            # purpose line contains the word 'approves', so a text match hits
-            # the wrong element.
-            action: click
-            find_by: { type: "LogosButton", text: "Approve" }
+            - name: "The keystore signed it, and the surface says so"
+              # approve() answers with a COUNT, never the signatures: the approver
+              # causes them to exist and never sees them. Only the requester can
+              # collect them, and only with the receipt it was handed at request
+              # time -- which is why this is the strongest thing this surface can
+              # honestly assert.
+              action: wait_for
+              texts: ["Approved — 1 item signed"]
+              timeout: 60000
 
-          - name: "The keystore signed it, and the surface says so"
-            # approve() answers with a COUNT, never the signatures: the approver
-            # causes them to exist and never sees them. Only the requester can
-            # collect them, and only with the receipt it was handed at request
-            # time -- which is why this is the strongest thing this surface can
-            # honestly assert.
-            action: wait_for
-            texts: ["Approved — 1 item signed"]
-            timeout: 60000
+            - name: "The queue is empty again"
+              action: wait_for
+              texts: ["No signing requests are waiting."]
+              timeout: 60000
+              screenshot: "signer-ui-approved.png"
 
-          - name: "The queue is empty again"
-            action: wait_for
-            texts: ["No signing requests are waiting."]
-            timeout: 60000
 
-          - name: "Screenshot after approval"
-            screenshot: "signer-ui-approved.png"
 
   - title: "The same plugin inside Basecamp"
     step: true
@@ -222,26 +224,36 @@ sections:
           cp -r result-keystore-p/modules/* bctree/modules/
           cp -r result-signer-p/plugins/*   bctree/plugins/
           chmod -R u+w bctree
-          cat bctree/plugins/signer_ui/variant
+          # Assert the PROPERTY, not one platform's spelling of it. The variant
+          # is linux-amd64 here and darwin-* elsewhere, so matching the literal
+          # string only ever passed on Linux. What matters is that it is the
+          # portable build: a "-dev" variant installs without complaint and then
+          # never loads, with only a "not supported on this platform" warning.
+          variant="$(cat bctree/plugins/signer_ui/variant)"
+          case "$variant" in
+            *-dev) echo "WRONG VARIANT (dev build): $variant"; exit 1 ;;
+            *)     echo "PORTABLE VARIANT OK: $variant" ;;
+          esac
         code_block: |
           nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' --no-write-lock-file -o result-basecamp
           nix build 'github:logos-co/logos-evm-keystore-module#install-portable' --no-write-lock-file -o result-keystore-p
           nix build 'github:logos-co/logos-evm-signer-ui#install-portable' --no-write-lock-file -o result-signer-p
         expect_contains:
-          - "linux-amd64"
+          - "PORTABLE VARIANT OK"
 
       - title: "It loads and renders in the shell"
-        launch: "env QT_FORCE_STDERR_LOGGING=1 ./result-basecamp/bin/LogosBasecamp --user-dir ./bctree"
-        qt_mcp: "result-mcp"
-        launch_timeout: 600
-        tests:
-          - name: "The signer surface is up inside Basecamp"
-            # Basecamp opens the installed app and the inspector attaches to its
-            # widget. Reaching this text means the plugin loaded, its backend was
-            # admitted, and its QML compiled under Basecamp's sandbox.
-            action: wait_for
-            texts: ["Refresh", "No signing requests are waiting."]
-            timeout: 120000
+        ui_test:
+          launch: "env QT_FORCE_STDERR_LOGGING=1 ./result-basecamp/bin/LogosBasecamp --user-dir ./bctree"
+          qt_mcp: "result-mcp"
+          launch_timeout: 600
+          tests:
+            - name: "The signer surface is up inside Basecamp"
+              # Basecamp opens the installed app and the inspector attaches to its
+              # widget. Reaching this text means the plugin loaded, its backend was
+              # admitted, and its QML compiled under Basecamp's sandbox.
+              action: wait_for
+              texts: ["Refresh", "No signing requests are waiting."]
+              timeout: 120000
+              screenshot: "signer-ui-basecamp.png"
 
-          - name: "Screenshot inside Basecamp"
-            screenshot: "signer-ui-basecamp.png"
+

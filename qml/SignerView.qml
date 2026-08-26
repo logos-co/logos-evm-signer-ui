@@ -142,6 +142,10 @@ Item {
 
             LogosTextField {
                 id: pw
+                // Addressable by name: the doc-test harness locates fields with
+                // find_by "objectName", and a type name is not stable (QML
+                // decorates it, e.g. LogosTextField_QMLTYPE_18).
+                objectName: "vaultPasswordField"
                 Layout.fillWidth: true
                 echoMode: TextInput.Password
                 placeholderText: "Vault password"

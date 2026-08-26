@@ -96,7 +96,11 @@ fn drive(state: Shared) {
     // plugins, so the first offers of a run routinely expire.
     let intent = json!({
         "address": address,
-        "purpose": "Doc-test: prove the signer UI approves a real signature",
+        // Deliberately contains no form of the word "approve": the doc-test clicks
+        // the Approve button by TEXT, and this purpose line is rendered in the
+        // queue row, so any overlap makes the click ambiguous -- it matched the
+        // row instead of the button the first time.
+        "purpose": "Doc-test: sign one message end to end",
         "legs": [ { "kind": "message", "text": MESSAGE } ]
     })
     .to_string();

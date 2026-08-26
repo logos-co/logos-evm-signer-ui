@@ -189,13 +189,13 @@ sections:
               # an approver only 3s and gives the human no deadline at all.
               action: wait_for
               texts: ["Requested by: signer_probe"]
-              # 20s, not 35s. The whole node driver is capped at 120s per
-              # ui_test block (doctest.py run_cmd timeout=120); this block's
-              # waits summed to 105s, leaving no room for driver overhead, and
-              # an overrun reports a generic "UI tests failed" that LOSES the
-              # failing action name. The keystore's ack deadline is 3s, so 20s
-              # is still ample.
-              timeout: 20000
+              # 35s, and it is load-bearing: cutting this to 20s to buy headroom
+              # under the driver cap failed here with
+              # `Expected texts not found: ["Requested by: signer_probe"]`.
+              # Cold start plus the first cross-module call is genuinely slow on
+              # a loaded box. The headroom came out of the two waits below
+              # instead, which are now bounded by real mechanisms.
+              timeout: 35000
 
             - name: "The human is shown the keystore's own words, not the requester's"
               action: wait_for
@@ -229,7 +229,8 @@ sections:
               # "No clickable element found with text 'Approve'".
               action: wait_for
               texts: ["Approve"]
-              timeout: 10000
+              # kDwellMs is 500, so 5s is ten times the mechanism being waited on.
+              timeout: 5000
 
             - name: "Approve"
               # `click` matches the QObject `text` property by EQUALITY -- the
@@ -256,7 +257,10 @@ sections:
             - name: "The queue is empty again"
               action: wait_for
               texts: ["No signing requests are waiting."]
-              timeout: 10000
+              # approve() now drops the request from the queue in the same call
+              # stack that records the outcome, so this is immediate rather than
+              # waiting on the next poll. It no longer needs a poll-sized budget.
+              timeout: 5000
               screenshot: "signer-ui-approved.png"
 
 
@@ -311,15 +315,41 @@ sections:
 
       - title: "It loads and renders in the shell"
         ui_test:
-          # Port 3769, NOT the default 3768. The section above leaves a
-          # standalone-app (and its ui-host) on 3768, and the harness waits only
-          # 10s after killing the process group. If anything still holds 3768,
-          # Basecamp fails to listen and the driver silently attaches to the
-          # LEFTOVER signer UI -- which has no shell text, so this section fails
-          # on "Workspace" while looking like a wrong label. Separate ports make
-          # the collision impossible rather than unlikely.
-          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3769 ./result-basecamp/bin/LogosBasecamp --user-dir ./bctree"
-          inspector_port: 3769
+          # Wait for the section above to RELEASE port 3768 before launching.
+          #
+          # This app must listen on 3768 and no other port: the generated node
+          # driver reads QML_INSPECTOR_PORT from ITS OWN environment
+          # (framework.mjs: `process.env.QML_INSPECTOR_PORT || "3768"`), and the
+          # spec cannot set that -- `inspector_port:` steers only the harness's
+          # readiness wait, and the env in `launch:` reaches the app alone. So
+          # moving the app to 3769 does not move the driver, and the section can
+          # then only fail.
+          #
+          # The real hazard is the previous app. The harness kills its process
+          # group and waits 10s; a lingering standalone-app or ui-host can still
+          # hold 3768, in which case Basecamp fails to listen and the driver
+          # attaches to the LEFTOVER SIGNER UI -- which has no shell text. That
+          # surfaces as `Expected texts not found: ["Workspace"]` and reads
+          # exactly like a wrong label, which is how it was misdiagnosed twice.
+          # Measured: Basecamp itself paints "Workspace", "Welcome back" and the
+          # signer_ui tile at t=4.0-4.2s, so a missing shell is never slowness.
+          setup:
+            - |
+              python3 - <<'PY'
+              import socket, sys, time
+              for i in range(90):
+                  s = socket.socket(); s.settimeout(0.5)
+                  try:
+                      s.connect(("127.0.0.1", 3768)); s.close()
+                  except OSError:
+                      print("inspector port 3768 free after %ds" % i); sys.exit(0)
+                  time.sleep(1)
+              print("port 3768 STILL HELD after 90s -- the previous app outlived "
+                    "its process group; Basecamp would fail to listen and the "
+                    "driver would attach to the leftover UI")
+              sys.exit(1)
+              PY
+          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 ./result-basecamp/bin/LogosBasecamp --user-dir ./bctree"
           qt_mcp: "result-mcp"
           launch_timeout: 600
           tests:
@@ -331,7 +361,11 @@ sections:
               # click, so the click below would race the scan.
               action: wait_for
               texts: ["Welcome back", "Workspace"]
-              timeout: 60000
+              # Measured at t=4.1s against this exact build and staged tree, so
+              # 30s is ~7x margin. A failure here means the driver is talking to
+              # the wrong app, not that Basecamp is slow -- raising this number
+              # has never once helped.
+              timeout: 30000
 
             - name: "Open the Signer from the sidebar"
               # Nothing opens an app on its own: Basecamp loads a ui_qml plugin

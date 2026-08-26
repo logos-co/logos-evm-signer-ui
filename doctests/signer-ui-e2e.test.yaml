@@ -123,6 +123,11 @@ sections:
         listens when this is set.
     steps:
       - title: "Launch, approve, and collect the signature"
+        # Timeouts below must SUM to well under 120s: the runner caps the whole
+        # UI driver with run_cmd(..., timeout=120), so blowing that budget kills
+        # the driver mid-sequence instead of failing a named step. Locally the
+        # whole flow completes in about 15s, so these are already generous.
+        #
         # The two environment variables are set inline, not as a separate `env:`
         # block, because the runner does not carry one — and neither is optional:
         #   QML_INSPECTOR_PORT   the QML inspector is compiled in but only
@@ -141,7 +146,7 @@ sections:
             - name: "The signer UI connects to its backend"
               action: wait_for
               texts: ["Refresh"]
-              timeout: 60000
+              timeout: 20000
 
             - name: "The keystore parks the request and the UI claims it"
               # `acknowledge` means 'this approver has it on screen', not 'the human
@@ -149,15 +154,22 @@ sections:
               # an approver only 3s and gives the human no deadline at all.
               action: wait_for
               texts: ["Requested by: signer_probe"]
-              timeout: 120000
+              timeout: 35000
 
             - name: "The human is shown the keystore's own words, not the requester's"
               action: wait_for
               texts:
+              # EXACT strings. The matcher is findByProperty on `text`, so it is
+              # equality, not substring: "Commitment:" never matches the rendered
+              # "Commitment: <hex>", and the per-leg lines carry six leading spaces
+              # from the keystore's own formatting. The commitment itself is not
+              # asserted because it changes every run; the leg count and the message
+              # text are stable and say as much.
                 - "Account: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-                - "Commitment:"
-                - "Text: I authorise the doc-test transfer"
-              timeout: 60000
+                - "Purpose (claimed by the requester): Doc-test: sign one message end to end"
+                - "1 item(s) to sign:"
+                - "      Text: I authorise the doc-test transfer"
+              timeout: 10000
               screenshot: "signer-ui-approval.png"
 
             - name: "Type the vault password"
@@ -183,12 +195,12 @@ sections:
               # honestly assert.
               action: wait_for
               texts: ["Approved — 1 item signed"]
-              timeout: 60000
+              timeout: 20000
 
             - name: "The queue is empty again"
               action: wait_for
               texts: ["No signing requests are waiting."]
-              timeout: 60000
+              timeout: 10000
               screenshot: "signer-ui-approved.png"
 
 
@@ -253,7 +265,7 @@ sections:
               # admitted, and its QML compiled under Basecamp's sandbox.
               action: wait_for
               texts: ["Refresh", "No signing requests are waiting."]
-              timeout: 120000
+              timeout: 45000
               screenshot: "signer-ui-basecamp.png"
 
 

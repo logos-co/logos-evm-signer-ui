@@ -53,6 +53,13 @@ sections:
           set -euo pipefail
           nix build 'github:logos-co/logos-standalone-app' --no-write-lock-file -o result-app
           nix build 'github:logos-co/logos-qt-mcp' --no-write-lock-file -o result-mcp
+
+      # Its own step ON PURPOSE: the harness dispatches
+      #   if file / elif run / elif ui_test / elif check_file
+      # so a check_file sharing a step with run: is NEVER evaluated. All
+      # five of these were dead, and the build steps were proving only
+      # that nix exited 0, never that it produced anything.
+      - title: "The runtime and driver really landed"
         check_file: "result-app"
 
       # One build per step. A single step running four builds reports only the
@@ -65,16 +72,37 @@ sections:
       - title: "Build the keystore"
         run: "nix build 'github:logos-co/logos-evm-keystore-module{release}#install' --no-write-lock-file -o result-keystore"
         code_block: "nix build 'github:logos-co/logos-evm-keystore-module#install' --no-write-lock-file -o result-keystore"
+
+      # Its own step ON PURPOSE: the harness dispatches
+      #   if file / elif run / elif ui_test / elif check_file
+      # so a check_file sharing a step with run: is NEVER evaluated. All
+      # five of these were dead, and the build steps were proving only
+      # that nix exited 0, never that it produced anything.
+      - title: "The keystore really produced modules"
         check_file: "result-keystore/modules"
 
       - title: "Build the signer UI"
         run: "nix build 'github:logos-co/logos-evm-signer-ui{release}#install' --no-write-lock-file -o result-signer"
         code_block: "nix build 'github:logos-co/logos-evm-signer-ui#install' --no-write-lock-file -o result-signer"
+
+      # Its own step ON PURPOSE: the harness dispatches
+      #   if file / elif run / elif ui_test / elif check_file
+      # so a check_file sharing a step with run: is NEVER evaluated. All
+      # five of these were dead, and the build steps were proving only
+      # that nix exited 0, never that it produced anything.
+      - title: "The signer UI really produced a plugin"
         check_file: "result-signer/plugins"
 
       - title: "Build the requesting module"
         run: "nix build 'github:logos-co/logos-evm-signer-ui{release}?dir=doctests/requester#install' --no-write-lock-file -o result-probe"
         code_block: "nix build 'github:logos-co/logos-evm-signer-ui?dir=doctests/requester#install' --no-write-lock-file -o result-probe"
+
+      # Its own step ON PURPOSE: the harness dispatches
+      #   if file / elif run / elif ui_test / elif check_file
+      # so a check_file sharing a step with run: is NEVER evaluated. All
+      # five of these were dead, and the build steps were proving only
+      # that nix exited 0, never that it produced anything.
+      - title: "The probe really produced a module"
         check_file: "result-probe/modules"
 
       - title: "Build capability_module"
@@ -84,6 +112,13 @@ sections:
           than assumed.
         run: "nix build 'github:logos-co/logos-capability-module#install' --no-write-lock-file -o result-capability"
         code_block: "nix build 'github:logos-co/logos-capability-module#install' --no-write-lock-file -o result-capability"
+
+      # Its own step ON PURPOSE: the harness dispatches
+      #   if file / elif run / elif ui_test / elif check_file
+      # so a check_file sharing a step with run: is NEVER evaluated. All
+      # five of these were dead, and the build steps were proving only
+      # that nix exited 0, never that it produced anything.
+      - title: "capability_module really produced modules"
         check_file: "result-capability/modules"
 
       - title: "Lay them out for the host"
@@ -154,7 +189,13 @@ sections:
               # an approver only 3s and gives the human no deadline at all.
               action: wait_for
               texts: ["Requested by: signer_probe"]
-              timeout: 35000
+              # 20s, not 35s. The whole node driver is capped at 120s per
+              # ui_test block (doctest.py run_cmd timeout=120); this block's
+              # waits summed to 105s, leaving no room for driver overhead, and
+              # an overrun reports a generic "UI tests failed" that LOSES the
+              # failing action name. The keystore's ack deadline is 3s, so 20s
+              # is still ample.
+              timeout: 20000
 
             - name: "The human is shown the keystore's own words, not the requester's"
               action: wait_for
@@ -191,11 +232,14 @@ sections:
               timeout: 10000
 
             - name: "Approve"
-              # `click` matches by TEXT, and text matching is substring-based, so
-              # nothing else on screen may contain this word. The requester's
-              # purpose line used to read "...approves a real signature" and this
-              # click landed on the queue row instead of the button; the purpose
-              # was reworded rather than the click made cleverer.
+              # `click` matches the QObject `text` property by EQUALITY -- the
+              # generator always emits `app.click(target, { exact: true })`, and
+              # wait_for/expectTexts use findByProperty, which is equality too.
+              # (Substring matching applies only to hand-written .mjs calling
+              # app.click with no opts.) An earlier comment here claimed
+              # substring and drove a needless rewording of the requester's
+              # purpose line; the rewording is harmless and stays, but the
+              # reasoning was wrong.
               action: click
               target: "Approve"
 
@@ -267,25 +311,42 @@ sections:
 
       - title: "It loads and renders in the shell"
         ui_test:
-          launch: "env QT_FORCE_STDERR_LOGGING=1 ./result-basecamp/bin/LogosBasecamp --user-dir ./bctree"
+          # Port 3769, NOT the default 3768. The section above leaves a
+          # standalone-app (and its ui-host) on 3768, and the harness waits only
+          # 10s after killing the process group. If anything still holds 3768,
+          # Basecamp fails to listen and the driver silently attaches to the
+          # LEFTOVER signer UI -- which has no shell text, so this section fails
+          # on "Workspace" while looking like a wrong label. Separate ports make
+          # the collision impossible rather than unlikely.
+          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3769 ./result-basecamp/bin/LogosBasecamp --user-dir ./bctree"
+          inspector_port: 3769
           qt_mcp: "result-mcp"
           launch_timeout: 600
           tests:
-            - name: "The shell is up"
+            - name: "The shell is up and the app list has been scanned"
+              # "Welcome back" replaces "Welcome to Basecamp!" only once the
+              # launcher model is POPULATED -- i.e. the plugin directory has been
+              # scanned and the signer_ui tile exists. Waiting on "Workspace"
+              # alone proves the shell painted, not that there is anything to
+              # click, so the click below would race the scan.
               action: wait_for
-              texts: ["Workspace"]
-              timeout: 30000
+              texts: ["Welcome back", "Workspace"]
+              timeout: 60000
 
             - name: "Open the Signer from the sidebar"
               # Nothing opens an app on its own: Basecamp loads a ui_qml plugin
               # only when its tile is clicked, and its dependencies with it. The
               # earlier version of this section asserted "Refresh" and passed
-              # without ever opening the plugin -- "Refresh" also matches shell
-              # chrome, so it was a false positive on a view that was not there.
-              action: click
-              target: "Workspace"
-
-            - name: "Launch it"
+              # without ever opening the plugin -- "Refresh" is an unconditional
+              # literal in the shell, so it was a false positive on a view that
+              # was not there.
+              #
+              # The tile renders ICON-ONLY (a LogosTile, with the name only in a
+              # hover tooltip), but the driver matches the QObject `text`
+              # property rather than pixels, and that property is
+              # `displayName || name` -- and metadata.json sets no display_name.
+              # So the tile's text is exactly "signer_ui". No "Workspace" click
+              # is needed first: section 0 is the startup default.
               action: click
               target: "signer_ui"
 

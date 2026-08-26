@@ -195,6 +195,23 @@ bool SignerUiBackend::approve(QString handle, QString bundleId, QString password
         setStatusText(n == 1 ? QStringLiteral("Approved — 1 item signed")
                              : QStringLiteral("Approved — %1 items signed").arg(n));
         m_confirmUntil = QDateTime::currentDateTimeUtc().addSecs(kConfirmSeconds);
+
+        // Drop the approved request from the queue HERE, in the same slot that
+        // records the outcome. The keystore has already settled the record, so
+        // this only says what is now true -- but saying it now is what makes it
+        // reliable: the refresh() below can be swallowed whole by the m_inFlight
+        // guard if a poll is already blocked inside pending(), and a pending()
+        // that fails or times out returns without touching the queue at all.
+        // That left an approved request on screen for up to one 20s RPC
+        // deadline, long after the human was told it was signed.
+        QJsonArray rest;
+        const QJsonArray shown = QJsonDocument::fromJson(pendingJson().toUtf8()).array();
+        for (const QJsonValue &v : shown) {
+            if (v.toObject().value(QStringLiteral("handle")).toString() != handle) {
+                rest.append(v);
+            }
+        }
+        setPendingJson(QString::fromUtf8(QJsonDocument(rest).toJson(QJsonDocument::Compact)));
     }
     if (!ok) {
         // Deliberately generic: the keystore does not distinguish a wrong

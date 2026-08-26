@@ -67,6 +67,28 @@ void SignerUiBackend::refresh()
     setPendingJson(QString::fromUtf8(QJsonDocument(items).toJson(QJsonDocument::Compact)));
     setStatusText(items.isEmpty() ? QStringLiteral("Nothing to approve")
                                   : QStringLiteral("%1 waiting").arg(items.size()));
+
+    // Acknowledge receipt automatically.
+    //
+    // `acknowledge` means "this approver has the request on screen", NOT "the
+    // human decided" — the keystore gives an approver only ACK_DEADLINE (3s)
+    // to claim an offer, and after the claim there is deliberately no deadline
+    // at all, because a person is reading. Waiting for a click here would put
+    // a 3-second timer on a human, which is exactly the deadline the design
+    // says must not exist: every request would expire before it could be read.
+    //
+    // Only ever one at a time: the keystore keeps at most one record Rendered
+    // (claiming another demotes the previous), and that single Rendered record
+    // is what binds the text a human read to the approval they then give. So
+    // claim the head of the queue and leave the rest Offered; a requester that
+    // re-offers gets picked up as soon as this one is decided.
+    if (renderedHandle().isEmpty() && !items.isEmpty()) {
+        const QString next = items.first().toObject()
+                                  .value(QStringLiteral("handle")).toString();
+        if (!next.isEmpty()) {
+            acknowledge(next);
+        }
+    }
 }
 
 void SignerUiBackend::acknowledge(QString handle)

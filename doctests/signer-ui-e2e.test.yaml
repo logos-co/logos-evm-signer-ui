@@ -46,25 +46,45 @@ sections:
     steps:
       - title: "The host and the test driver"
         run: |
-          nix build 'github:logos-co/logos-standalone-app' -o result-app
-          nix build 'github:logos-co/logos-qt-mcp' -o result-mcp
+          set -euo pipefail
+          nix build 'github:logos-co/logos-standalone-app' --no-write-lock-file -o result-app
+          nix build 'github:logos-co/logos-qt-mcp' --no-write-lock-file -o result-mcp
         code_block: |
-          nix build 'github:logos-co/logos-standalone-app' -o result-app
-          nix build 'github:logos-co/logos-qt-mcp' -o result-mcp
+          set -euo pipefail
+          nix build 'github:logos-co/logos-standalone-app' --no-write-lock-file -o result-app
+          nix build 'github:logos-co/logos-qt-mcp' --no-write-lock-file -o result-mcp
         check_file: "result-app"
 
-      - title: "The keystore, the signer UI, and the requester"
-        run: |
-          nix build 'github:logos-co/logos-evm-keystore-module{release}#install' -o result-keystore
-          nix build 'github:logos-co/logos-evm-signer-ui{release}#install' -o result-signer
-          nix build 'github:logos-co/logos-evm-signer-ui{release}?dir=doctests/requester#install' -o result-probe
-          nix build 'github:logos-co/logos-capability-module#install' -o result-capability
-        code_block: |
-          nix build 'github:logos-co/logos-evm-keystore-module#install' -o result-keystore
-          nix build 'github:logos-co/logos-evm-signer-ui#install' -o result-signer
-          nix build 'github:logos-co/logos-evm-signer-ui?dir=doctests/requester#install' -o result-probe
-          nix build 'github:logos-co/logos-capability-module#install' -o result-capability
-        check_file: "result-signer"
+      # One build per step. A single step running four builds reports only the
+      # LAST one's exit code, so three of them can fail while the step goes
+      # green -- which is exactly what happened here the first time.
+      #
+      # --no-write-lock-file on every remote build: these flakes do not commit a
+      # flake.lock, so nix wants to write one into a read-only source and fails
+      # with "cannot write modified lock file".
+      - title: "Build the keystore"
+        run: "nix build 'github:logos-co/logos-evm-keystore-module{release}#install' --no-write-lock-file -o result-keystore"
+        code_block: "nix build 'github:logos-co/logos-evm-keystore-module#install' --no-write-lock-file -o result-keystore"
+        check_file: "result-keystore/modules"
+
+      - title: "Build the signer UI"
+        run: "nix build 'github:logos-co/logos-evm-signer-ui{release}#install' --no-write-lock-file -o result-signer"
+        code_block: "nix build 'github:logos-co/logos-evm-signer-ui#install' --no-write-lock-file -o result-signer"
+        check_file: "result-signer/plugins"
+
+      - title: "Build the requesting module"
+        run: "nix build 'github:logos-co/logos-evm-signer-ui{release}?dir=doctests/requester#install' --no-write-lock-file -o result-probe"
+        code_block: "nix build 'github:logos-co/logos-evm-signer-ui?dir=doctests/requester#install' --no-write-lock-file -o result-probe"
+        check_file: "result-probe/modules"
+
+      - title: "Build capability_module"
+        text: |
+          Not bundled with the standalone host. Without it every token handshake
+          times out and every call is refused, so it is staged explicitly rather
+          than assumed.
+        run: "nix build 'github:logos-co/logos-capability-module#install' --no-write-lock-file -o result-capability"
+        code_block: "nix build 'github:logos-co/logos-capability-module#install' --no-write-lock-file -o result-capability"
+        check_file: "result-capability/modules"
 
       - title: "Lay them out for the host"
         text: |
@@ -72,6 +92,7 @@ sections:
           it every token handshake times out and calls are refused — so it is
           staged alongside the others rather than assumed.
         run: |
+          set -euo pipefail
           mkdir -p tree/modules tree/plugins
           cp -r result-keystore/modules/*   tree/modules/
           cp -r result-probe/modules/*      tree/modules/
@@ -193,18 +214,19 @@ sections:
           variant is not an error — the module is silently skipped with a
           "not supported on this platform" warning and simply never loads.
         run: |
-          nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' -o result-basecamp
-          nix build 'github:logos-co/logos-evm-keystore-module{release}#install-portable' -o result-keystore-p
-          nix build 'github:logos-co/logos-evm-signer-ui{release}#install-portable' -o result-signer-p
+          set -euo pipefail
+          nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' --no-write-lock-file -o result-basecamp
+          nix build 'github:logos-co/logos-evm-keystore-module{release}#install-portable' --no-write-lock-file -o result-keystore-p
+          nix build 'github:logos-co/logos-evm-signer-ui{release}#install-portable' --no-write-lock-file -o result-signer-p
           mkdir -p bctree/modules bctree/plugins
           cp -r result-keystore-p/modules/* bctree/modules/
           cp -r result-signer-p/plugins/*   bctree/plugins/
           chmod -R u+w bctree
           cat bctree/plugins/signer_ui/variant
         code_block: |
-          nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' -o result-basecamp
-          nix build 'github:logos-co/logos-evm-keystore-module#install-portable' -o result-keystore-p
-          nix build 'github:logos-co/logos-evm-signer-ui#install-portable' -o result-signer-p
+          nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' --no-write-lock-file -o result-basecamp
+          nix build 'github:logos-co/logos-evm-keystore-module#install-portable' --no-write-lock-file -o result-keystore-p
+          nix build 'github:logos-co/logos-evm-signer-ui#install-portable' --no-write-lock-file -o result-signer-p
         expect_contains:
           - "linux-amd64"
 

@@ -120,8 +120,18 @@ Item {
                 id: pw
                 Layout.fillWidth: true
                 echoMode: TextInput.Password
-                passwordMaskDelay: 0
                 placeholderText: "Vault password"
+
+                // Mask every character immediately. Qt's default reveals the
+                // last character typed for a second, which is exactly the
+                // character an onlooker needs. `passwordMaskDelay` lives on the
+                // inner TextInput -- LogosTextField does not re-expose it, but
+                // it does expose the input itself as a readonly alias, so set
+                // it there. Assigning it on the control fails to compile with
+                // "Cannot assign to non-existent property", which takes the
+                // WHOLE view down: a QML compile error means the plugin never
+                // renders at all.
+                Component.onCompleted: textInput.passwordMaskDelay = 0
             }
 
             RowLayout {

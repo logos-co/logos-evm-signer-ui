@@ -19,8 +19,32 @@ Item {
     id: root
     anchors.fill: parent
 
+    // Paint the surface. Without this the QQuickWidget's own (white) clear
+    // colour shows through, and LogosText defaults to Theme.palette.text —
+    // which is a LIGHT colour under the dark theme, so every label rendered
+    // white-on-white and the view looked empty even though it had loaded.
+    Rectangle {
+        anchors.fill: parent
+        color: Theme.palette.background
+    }
+
     readonly property var backend: logos.module("signer_ui")
-    readonly property bool ready: backend !== null && logos.isViewModuleReady("signer_ui")
+
+    // `ready` must be a writable property fed by the bridge's signal, NOT a
+    // binding. `logos.isViewModuleReady(...)` is a function call, and a
+    // function call is not a reactive dependency: a binding containing one
+    // evaluates once, at creation, when the ui-host has not finished handing
+    // over yet — so it latches false forever and the view sits on "Connecting…"
+    // with a backend that is in fact working.
+    property bool ready: false
+
+    Connections {
+        target: logos
+        function onViewModuleReadyChanged(moduleName, isReady) {
+            if (moduleName === "signer_ui") root.ready = isReady && root.backend !== null
+        }
+    }
+    Component.onCompleted: root.ready = root.backend !== null && logos.isViewModuleReady("signer_ui")
     readonly property var queue: {
         try { return JSON.parse(backend ? backend.pendingJson : "[]") } catch (e) { return [] }
     }
@@ -52,7 +76,7 @@ Item {
             text: root.ready ? backend.lastError : ""
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
-            color: Logos.Theme.danger !== undefined ? Logos.Theme.danger : "#c0392b"
+            color: Theme.palette.error
         }
 
         // ── the queue ───────────────────────────────────────────────────────
@@ -118,10 +142,24 @@ Item {
 
             LogosTextField {
                 id: pw
+                // Addressable by name: the doc-test harness locates fields with
+                // find_by "objectName", and a type name is not stable (QML
+                // decorates it, e.g. LogosTextField_QMLTYPE_18).
+                objectName: "vaultPasswordField"
                 Layout.fillWidth: true
                 echoMode: TextInput.Password
-                passwordMaskDelay: 0
                 placeholderText: "Vault password"
+
+                // Mask every character immediately. Qt's default reveals the
+                // last character typed for a second, which is exactly the
+                // character an onlooker needs. `passwordMaskDelay` lives on the
+                // inner TextInput -- LogosTextField does not re-expose it, but
+                // it does expose the input itself as a readonly alias, so set
+                // it there. Assigning it on the control fails to compile with
+                // "Cannot assign to non-existent property", which takes the
+                // WHOLE view down: a QML compile error means the plugin never
+                // renders at all.
+                Component.onCompleted: textInput.passwordMaskDelay = 0
             }
 
             RowLayout {

@@ -1,0 +1,17 @@
+{
+  "name": "signer_probe_app",
+  "version": "1.0.0",
+  "type": "ui_qml",
+  "interface": "universal",
+  "category": "test",
+  "description": "Doc-test fixture: the app whose backend module asks for a signature. Exists so the host loads signer_probe the way it loads any wallet's backend — as a declared dependency of an installed app.",
+  "main": null,
+  "icon": "icons/probe.png",
+  "view": "qml/ProbeView.qml",
+  "dependencies": ["signer_probe"],
+  "nix": {
+    "packages": { "build": [], "runtime": [] },
+    "external_libraries": [],
+    "cmake": { "find_packages": [], "extra_sources": [], "extra_include_dirs": [], "extra_link_libraries": [] }
+  }
+}

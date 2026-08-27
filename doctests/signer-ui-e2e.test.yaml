@@ -1,0 +1,397 @@
+name: "Approving a signature: request, render, password, signature"
+output: signer-ui-e2e.md
+release: ""
+
+intro: |
+  This doc-test proves the whole point of `signer_ui`: **a module can ask for a
+  signature, but only a human can produce one.**
+
+  It runs the real chain headlessly — a requesting module, the keystore, and the
+  signer UI — and drives the UI the way a person would, through
+  [`logos-qt-mcp`](https://github.com/logos-co/logos-qt-mcp):
+
+  1. `signer_probe` (a Tier B requester) imports a known key and asks for a
+     signature on a message.
+  2. The keystore parks the request and announces it.
+  3. `signer_ui` — the only module allowed to approve — acknowledges receipt and
+     renders **the keystore's own words**, verbatim.
+  4. The password is typed into the UI and Approve is clicked.
+  5. The requester collects a real secp256k1 signature with its receipt.
+
+  Every refusal on the way is asserted too, because they are the design: the
+  requester can ask and collect but can never approve, and nothing signs until
+  the human acts.
+
+what_you_build: "The keystore, the signer UI and a requesting module, run together in a headless app and driven through the real QML surface to produce one signature."
+
+what_you_learn:
+  - "Why signing needs an approver at all — and what the keystore shows the human"
+  - "How Tier A (approve) and Tier B (request) are separated by caller identity"
+  - "Why the requester re-offers when nobody is listening, and what it tells the user"
+  - "How to drive a Logos UI plugin headlessly and assert on what it rendered"
+
+prerequisites:
+  - |
+    **Nix** with flakes enabled (see [nixos.org](https://nixos.org/download.html)).
+  - "**A Linux or macOS machine.** The app runs headless via `QT_QPA_PLATFORM=offscreen`, so no display is required."
+
+sections:
+  - title: "Build the pieces"
+    step: true
+    text: |
+      Three modules and a host. `signer_probe` is a doc-test fixture that lives
+      in this repo: something has to *ask* for a signature, and it has to be a
+      named module, because Tier B refuses the host anchor and therefore refuses
+      the CLI.
+    steps:
+      - title: "The host and the test driver"
+        run: |
+          set -euo pipefail
+          nix build 'github:logos-co/logos-standalone-app' --no-write-lock-file -o result-app
+          nix build 'github:logos-co/logos-qt-mcp' --no-write-lock-file -o result-mcp
+        code_block: |
+          set -euo pipefail
+          nix build 'github:logos-co/logos-standalone-app' --no-write-lock-file -o result-app
+          nix build 'github:logos-co/logos-qt-mcp' --no-write-lock-file -o result-mcp
+
+      # Its own step ON PURPOSE: the harness dispatches
+      #   if file / elif run / elif ui_test / elif check_file
+      # so a check_file sharing a step with run: is NEVER evaluated. All
+      # five of these were dead, and the build steps were proving only
+      # that nix exited 0, never that it produced anything.
+      - title: "The runtime and driver really landed"
+        check_file: "result-app"
+
+      # One build per step. A single step running four builds reports only the
+      # LAST one's exit code, so three of them can fail while the step goes
+      # green -- which is exactly what happened here the first time.
+      #
+      # --no-write-lock-file on every remote build: these flakes do not commit a
+      # flake.lock, so nix wants to write one into a read-only source and fails
+      # with "cannot write modified lock file".
+      - title: "Build the keystore"
+        run: "nix build 'github:logos-co/logos-evm-keystore-module{release}#install' --no-write-lock-file -o result-keystore"
+        code_block: "nix build 'github:logos-co/logos-evm-keystore-module#install' --no-write-lock-file -o result-keystore"
+
+      # Its own step ON PURPOSE: the harness dispatches
+      #   if file / elif run / elif ui_test / elif check_file
+      # so a check_file sharing a step with run: is NEVER evaluated. All
+      # five of these were dead, and the build steps were proving only
+      # that nix exited 0, never that it produced anything.
+      - title: "The keystore really produced modules"
+        check_file: "result-keystore/modules"
+
+      - title: "Build the signer UI"
+        run: "nix build 'github:logos-co/logos-evm-signer-ui{release}#install' --no-write-lock-file -o result-signer"
+        code_block: "nix build 'github:logos-co/logos-evm-signer-ui#install' --no-write-lock-file -o result-signer"
+
+      # Its own step ON PURPOSE: the harness dispatches
+      #   if file / elif run / elif ui_test / elif check_file
+      # so a check_file sharing a step with run: is NEVER evaluated. All
+      # five of these were dead, and the build steps were proving only
+      # that nix exited 0, never that it produced anything.
+      - title: "The signer UI really produced a plugin"
+        check_file: "result-signer/plugins"
+
+      - title: "Build the requesting module"
+        run: "nix build 'github:logos-co/logos-evm-signer-ui{release}?dir=doctests/requester#install' --no-write-lock-file -o result-probe"
+        code_block: "nix build 'github:logos-co/logos-evm-signer-ui?dir=doctests/requester#install' --no-write-lock-file -o result-probe"
+
+      # Its own step ON PURPOSE: the harness dispatches
+      #   if file / elif run / elif ui_test / elif check_file
+      # so a check_file sharing a step with run: is NEVER evaluated. All
+      # five of these were dead, and the build steps were proving only
+      # that nix exited 0, never that it produced anything.
+      - title: "The probe really produced a module"
+        check_file: "result-probe/modules"
+
+      - title: "Build capability_module"
+        text: |
+          Not bundled with the standalone host. Without it every token handshake
+          times out and every call is refused, so it is staged explicitly rather
+          than assumed.
+        run: "nix build 'github:logos-co/logos-capability-module#install' --no-write-lock-file -o result-capability"
+        code_block: "nix build 'github:logos-co/logos-capability-module#install' --no-write-lock-file -o result-capability"
+
+      # Its own step ON PURPOSE: the harness dispatches
+      #   if file / elif run / elif ui_test / elif check_file
+      # so a check_file sharing a step with run: is NEVER evaluated. All
+      # five of these were dead, and the build steps were proving only
+      # that nix exited 0, never that it produced anything.
+      - title: "capability_module really produced modules"
+        check_file: "result-capability/modules"
+
+      - title: "Lay them out for the host"
+        text: |
+          `capability_module` is not bundled with the standalone host, and without
+          it every token handshake times out and calls are refused — so it is
+          staged alongside the others rather than assumed.
+        run: |
+          set -euo pipefail
+          mkdir -p tree/modules tree/plugins
+          cp -r result-keystore/modules/*   tree/modules/
+          cp -r result-probe/modules/*      tree/modules/
+          cp -r result-capability/modules/* tree/modules/
+          cp -r result-signer/plugins/*     tree/plugins/
+          chmod -R u+w tree
+          ls tree/modules tree/plugins
+        code_block: |
+          mkdir -p tree/modules tree/plugins
+          cp -r result-keystore/modules/*   tree/modules/
+          cp -r result-probe/modules/*      tree/modules/
+          cp -r result-capability/modules/* tree/modules/
+          cp -r result-signer/plugins/*     tree/plugins/
+        expect_contains:
+          - "keystore_module"
+          - "signer_probe"
+          - "signer_ui"
+
+  - title: "Run it and approve a signature"
+    step: true
+    text: |
+      The host loads the requester with `--load` and shows the signer UI. Two
+      environment variables matter and are not optional:
+
+      - `QT_FORCE_STDERR_LOGGING=1` — otherwise Qt routes the app's own
+        diagnostics to journald and a failure prints **nothing at all**.
+      - `QML_INSPECTOR_PORT=3768` — the QML inspector is compiled in but only
+        listens when this is set.
+    steps:
+      - title: "Launch, approve, and collect the signature"
+        # Timeouts below must SUM to well under 120s: the runner caps the whole
+        # UI driver with run_cmd(..., timeout=120), so blowing that budget kills
+        # the driver mid-sequence instead of failing a named step. Locally the
+        # whole flow completes in about 15s, so these are already generous.
+        #
+        # The two environment variables are set inline, not as a separate `env:`
+        # block, because the runner does not carry one — and neither is optional:
+        #   QML_INSPECTOR_PORT   the QML inspector is compiled in but only
+        #                        listens when this is set, so without it qt-mcp
+        #                        has nothing to connect to.
+        #   QT_FORCE_STDERR_LOGGING  Qt prefers journald where it is available,
+        #                        so without it a failure in this app prints
+        #                        NOTHING — not the QML error, not the ui-host
+        #                        timeout. An absent warning then reads as a
+        #                        passed check.
+        ui_test:
+          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 ./result-app/bin/logos-standalone-app -p ./tree/plugins/signer_ui -m ./tree/modules --load signer_probe -u ./userdir"
+          qt_mcp: "result-mcp"
+          launch_timeout: 600
+          tests:
+            - name: "The signer UI connects to its backend"
+              action: wait_for
+              texts: ["Refresh"]
+              timeout: 20000
+
+            - name: "The keystore parks the request and the UI claims it"
+              # `acknowledge` means 'this approver has it on screen', not 'the human
+              # decided' — the UI claims receipt itself, because the keystore gives
+              # an approver only 3s and gives the human no deadline at all.
+              action: wait_for
+              texts: ["Requested by: signer_probe"]
+              # 35s, and it is load-bearing: cutting this to 20s to buy headroom
+              # under the driver cap failed here with
+              # `Expected texts not found: ["Requested by: signer_probe"]`.
+              # Cold start plus the first cross-module call is genuinely slow on
+              # a loaded box. The headroom came out of the two waits below
+              # instead, which are now bounded by real mechanisms.
+              timeout: 35000
+
+            - name: "The human is shown the keystore's own words, not the requester's"
+              action: wait_for
+              texts:
+              # EXACT strings. The matcher is findByProperty on `text`, so it is
+              # equality, not substring: "Commitment:" never matches the rendered
+              # "Commitment: <hex>", and the per-leg lines carry six leading spaces
+              # from the keystore's own formatting. The commitment itself is not
+              # asserted because it changes every run; the leg count and the message
+              # text are stable and say as much.
+                - "Account: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+                - "Purpose (claimed by the requester): Doc-test: sign one message end to end"
+                - "1 item(s) to sign:"
+                - "      Text: I authorise the doc-test transfer"
+              timeout: 10000
+              screenshot: "signer-ui-approval.png"
+
+            - name: "Type the vault password"
+              action: set_text
+              find_by: "objectName"
+              find_value: "vaultPasswordField"
+              value: "doctest-pw"
+
+            - name: "Approve arms only after the dwell"
+              # The button's label IS the state: it reads "Reading…" until the
+              # sheet has been up for the dwell period, and the backend refuses
+              # an early approval regardless of what the view believes. Waiting
+              # for the label is therefore both the precondition and the
+              # assertion -- and it is deterministic, unlike a sleep. macOS
+              # clicked before the dwell fired and got
+              # "No clickable element found with text 'Approve'".
+              action: wait_for
+              texts: ["Approve"]
+              # kDwellMs is 500, so 5s is ten times the mechanism being waited on.
+              timeout: 5000
+
+            - name: "Approve"
+              # `click` matches the QObject `text` property by EQUALITY -- the
+              # generator always emits `app.click(target, { exact: true })`, and
+              # wait_for/expectTexts use findByProperty, which is equality too.
+              # (Substring matching applies only to hand-written .mjs calling
+              # app.click with no opts.) An earlier comment here claimed
+              # substring and drove a needless rewording of the requester's
+              # purpose line; the rewording is harmless and stays, but the
+              # reasoning was wrong.
+              action: click
+              target: "Approve"
+
+            - name: "The keystore signed it, and the surface says so"
+              # approve() answers with a COUNT, never the signatures: the approver
+              # causes them to exist and never sees them. Only the requester can
+              # collect them, and only with the receipt it was handed at request
+              # time -- which is why this is the strongest thing this surface can
+              # honestly assert.
+              action: wait_for
+              texts: ["Approved — 1 item signed"]
+              timeout: 20000
+
+            - name: "The queue is empty again"
+              action: wait_for
+              texts: ["No signing requests are waiting."]
+              # approve() now drops the request from the queue in the same call
+              # stack that records the outcome, so this is immediate rather than
+              # waiting on the next poll. It no longer needs a poll-sized budget.
+              timeout: 5000
+              screenshot: "signer-ui-approved.png"
+
+
+
+  - title: "The same plugin inside Basecamp"
+    step: true
+    text: |
+      The section above runs the signer in `logos-standalone-app`, which is what
+      makes the flow drivable: the QML inspector attaches to exactly **one**
+      QQuickWidget, and Basecamp gives every `ui_qml` plugin its own. Once a
+      plugin is open there, the shell — and therefore any second app — is
+      invisible to the driver, so the two-app version of this flow (a wallet
+      asking, the signer approving) cannot be driven end-to-end today. That is a
+      limitation of the test driver, not of the plugin.
+
+      What Basecamp *does* add is the real shell: the QML sandbox, the shared
+      `Logos.*` module resolution, and the portable variant contract. So this
+      section asserts exactly that much — the plugin installs, loads, and renders
+      there — and nothing it cannot honestly show.
+    steps:
+      - title: "Build Basecamp and the portable variants"
+        text: |
+          Basecamp takes **portable** packages (`linux-amd64`); the standalone
+          host takes **dev** ones (`linux-amd64-dev`). Installing the wrong
+          variant is not an error — the module is silently skipped with a
+          "not supported on this platform" warning and simply never loads.
+        run: |
+          set -euo pipefail
+          nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' --no-write-lock-file -o result-basecamp
+          nix build 'github:logos-co/logos-evm-keystore-module{release}#install-portable' --no-write-lock-file -o result-keystore-p
+          nix build 'github:logos-co/logos-evm-signer-ui{release}#install-portable' --no-write-lock-file -o result-signer-p
+          mkdir -p bctree/modules bctree/plugins
+          cp -r result-keystore-p/modules/* bctree/modules/
+          cp -r result-signer-p/plugins/*   bctree/plugins/
+          chmod -R u+w bctree
+          # Assert the PROPERTY, not one platform's spelling of it. The variant
+          # is linux-amd64 here and darwin-* elsewhere, so matching the literal
+          # string only ever passed on Linux. What matters is that it is the
+          # portable build: a "-dev" variant installs without complaint and then
+          # never loads, with only a "not supported on this platform" warning.
+          variant="$(cat bctree/plugins/signer_ui/variant)"
+          case "$variant" in
+            *-dev) echo "WRONG VARIANT (dev build): $variant"; exit 1 ;;
+            *)     echo "PORTABLE VARIANT OK: $variant" ;;
+          esac
+        code_block: |
+          nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' --no-write-lock-file -o result-basecamp
+          nix build 'github:logos-co/logos-evm-keystore-module#install-portable' --no-write-lock-file -o result-keystore-p
+          nix build 'github:logos-co/logos-evm-signer-ui#install-portable' --no-write-lock-file -o result-signer-p
+        expect_contains:
+          - "PORTABLE VARIANT OK"
+
+      - title: "It loads and renders in the shell"
+        ui_test:
+          # Wait for the section above to RELEASE port 3768 before launching.
+          #
+          # This app must listen on 3768 and no other port: the generated node
+          # driver reads QML_INSPECTOR_PORT from ITS OWN environment
+          # (framework.mjs: `process.env.QML_INSPECTOR_PORT || "3768"`), and the
+          # spec cannot set that -- `inspector_port:` steers only the harness's
+          # readiness wait, and the env in `launch:` reaches the app alone. So
+          # moving the app to 3769 does not move the driver, and the section can
+          # then only fail.
+          #
+          # The real hazard is the previous app. The harness kills its process
+          # group and waits 10s; a lingering standalone-app or ui-host can still
+          # hold 3768, in which case Basecamp fails to listen and the driver
+          # attaches to the LEFTOVER SIGNER UI -- which has no shell text. That
+          # surfaces as `Expected texts not found: ["Workspace"]` and reads
+          # exactly like a wrong label, which is how it was misdiagnosed twice.
+          # Measured: Basecamp itself paints "Workspace", "Welcome back" and the
+          # signer_ui tile at t=4.0-4.2s, so a missing shell is never slowness.
+          setup:
+            - |
+              python3 - <<'PY'
+              import socket, sys, time
+              for i in range(90):
+                  s = socket.socket(); s.settimeout(0.5)
+                  try:
+                      s.connect(("127.0.0.1", 3768)); s.close()
+                  except OSError:
+                      print("inspector port 3768 free after %ds" % i); sys.exit(0)
+                  time.sleep(1)
+              print("port 3768 STILL HELD after 90s -- the previous app outlived "
+                    "its process group; Basecamp would fail to listen and the "
+                    "driver would attach to the leftover UI")
+              sys.exit(1)
+              PY
+          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 ./result-basecamp/bin/LogosBasecamp --user-dir ./bctree"
+          qt_mcp: "result-mcp"
+          launch_timeout: 600
+          tests:
+            - name: "The shell is up and the app list has been scanned"
+              # "Welcome back" replaces "Welcome to Basecamp!" only once the
+              # launcher model is POPULATED -- i.e. the plugin directory has been
+              # scanned and the signer_ui tile exists. Waiting on "Workspace"
+              # alone proves the shell painted, not that there is anything to
+              # click, so the click below would race the scan.
+              action: wait_for
+              texts: ["Welcome back", "Workspace"]
+              # Measured at t=4.1s against this exact build and staged tree, so
+              # 30s is ~7x margin. A failure here means the driver is talking to
+              # the wrong app, not that Basecamp is slow -- raising this number
+              # has never once helped.
+              timeout: 30000
+
+            - name: "Open the Signer from the sidebar"
+              # Nothing opens an app on its own: Basecamp loads a ui_qml plugin
+              # only when its tile is clicked, and its dependencies with it. The
+              # earlier version of this section asserted "Refresh" and passed
+              # without ever opening the plugin -- "Refresh" is an unconditional
+              # literal in the shell, so it was a false positive on a view that
+              # was not there.
+              #
+              # The tile renders ICON-ONLY (a LogosTile, with the name only in a
+              # hover tooltip), but the driver matches the QObject `text`
+              # property rather than pixels, and that property is
+              # `displayName || name` -- and metadata.json sets no display_name.
+              # So the tile's text is exactly "signer_ui". No "Workspace" click
+              # is needed first: section 0 is the startup default.
+              action: click
+              target: "signer_ui"
+
+            - name: "The signer surface is up inside Basecamp"
+              # Plugin-specific text, so it cannot match the shell. Reaching it
+              # means the plugin loaded, its backend was admitted, and its QML
+              # compiled under Basecamp's sandbox -- which is the whole of what
+              # this section claims.
+              action: wait_for
+              texts: ["No signing requests are waiting."]
+              timeout: 45000
+              screenshot: "signer-ui-basecamp.png"
+
+

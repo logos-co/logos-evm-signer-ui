@@ -4,9 +4,7 @@
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
     keystore_module = {
-      # TEMPORARY: ?ref= while the approval surface lives on a branch.
-      # REVERT when logos-evm-keystore-module#6 merges.
-      url = "github:logos-co/logos-evm-keystore-module?ref=feat/keystore-hardening";
+      url = "github:logos-co/logos-evm-keystore-module";
       inputs.logos-module-builder.follows = "logos-module-builder";
     };
   };

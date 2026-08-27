@@ -72,16 +72,11 @@ jobs:
 
       - name: Run doc-tests
         run: |
-          # logos-evm-keystore-module is pinned to the branch carrying the
-          # approval surface this plugin approves against. DROP THIS LINE once
-          # logos-evm-keystore-module#6 merges — until then main has no
-          # request_approval/acknowledge/approve and the run cannot pass.
           nix run github:logos-co/logos-doctest -- run \
             doctests/signer-ui-e2e.test.yaml \
             --verbose \
             --continue-on-fail \
             --release-for logos-evm-signer-ui=${{ steps.commit.outputs.sha }} \
-            --release-for logos-evm-keystore-module=feat/keystore-hardening \
             --report "${{ runner.temp }}/doctest-report.html"
 
       - name: Stage report for upload

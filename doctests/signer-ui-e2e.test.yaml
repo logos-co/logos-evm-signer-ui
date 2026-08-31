@@ -265,7 +265,9 @@ sections:
               # time -- which is why this is the strongest thing this surface can
               # honestly assert.
               action: wait_for
-              texts: ["Approved — 1 item signed"]
+              # TWO items now: the message and the WETH transfer. The backend
+              # pluralises on signed_count, so this is "items", not "item".
+              texts: ["Approved — 2 items signed"]
               timeout: 20000
 
             - name: "The queue is empty again"

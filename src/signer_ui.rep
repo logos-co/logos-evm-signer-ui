@@ -6,9 +6,28 @@
 // a boundary crossing. Every OTHER ui .rep must be free of password parameters,
 // and CI asserts that.
 //
-// What is deliberately absent: any field the backend authors itself for display.
 // `renderLines` is whatever the keystore returned, verbatim. The backend may not
-// reformat, elide, truncate or re-order it.
+// reformat, elide, truncate or re-order it. That is the authoritative text.
+//
+// `interpretationLines` is the ONE exception, and it is constrained rather than
+// free-form. The backend decodes calldata locally (logos-tx-decoder, linked in,
+// offline) so this surface can say "this is a WETH transfer" and not only
+// "0xa9059cbb…". Three rules make that safe, and the tests assert them:
+//
+//   1. DERIVED, NOT FETCHED. The input is `renderLines` itself — the legs are
+//      read back out of the text on screen. Nothing is asked of another module
+//      or the network, so the interpretation cannot describe bytes other than
+//      the ones displayed.
+//   2. ADDITIVE, NEVER SUBSTITUTIVE. `renderLines` is shown in full whether or
+//      not anything decoded. An empty `interpretationLines` is the normal case
+//      for a message, a digest, or an unknown selector.
+//   3. SELF-LABELLING. Every line names its own confidence. Only a call to an
+//      address the decoder can identify says VERIFIED; a bare 4-byte match says
+//      UNVERIFIED, because a selector proves nothing about a contract.
+//
+// What remains deliberately absent: any field the backend authors from a source
+// other than `renderLines`. This plugin still has no client for any wallet,
+// chain, RPC or token-list module.
 class SignerUi
 {
     PROP(QString statusText="Starting" READONLY)
@@ -22,6 +41,10 @@ class SignerUi
     PROP(QString renderedBundleId="" READONLY)
     PROP(QString renderedRequester="" READONLY)
     PROP(QStringList renderLines READONLY)
+
+    // Locally decoded reading of the calldata in `renderLines`. Empty whenever
+    // nothing decoded, which is not an error. Never a substitute for the above.
+    PROP(QStringList interpretationLines READONLY)
 
     // False until the sheet has been fully visible for the dwell period. Held
     // in C++ so a QML-side edit cannot shorten it.

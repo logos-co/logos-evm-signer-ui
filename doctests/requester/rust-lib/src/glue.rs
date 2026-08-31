@@ -101,7 +101,20 @@ fn drive(state: Shared) {
         // queue row, so any overlap makes the click ambiguous -- it matched the
         // row instead of the button the first time.
         "purpose": "Doc-test: sign one message end to end",
-        "legs": [ { "kind": "message", "text": MESSAGE } ]
+        // A message leg AND a transaction leg. The transaction is what gives the
+        // signer UI something to decode: a WETH `transfer`, which its embedded
+        // ABI database can name and therefore mark VERIFIED. The message leg
+        // stays because it is decodable by nobody, and the sheet must show both.
+        "legs": [
+            { "kind": "message", "text": MESSAGE },
+            { "kind": "tx", "chain_id": 1, "tx": {
+                "to": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+                "value": "0",
+                "nonce": "0",
+                "gas_limit": "60000",
+                "data": "0xa9059cbb000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045000000000000000000000000000000000000000000000000000000003b9aca00"
+            }}
+        ]
     })
     .to_string();
 

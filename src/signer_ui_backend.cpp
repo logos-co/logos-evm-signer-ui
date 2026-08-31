@@ -7,6 +7,7 @@
 #include <QScopeGuard>
 
 #include "logos_sdk.h"
+#include "tx_decoder.h"
 
 namespace {
 
@@ -29,8 +30,64 @@ QJsonObject parseObject(const QString &raw)
 
 } // namespace
 
+SignerUiBackend::~SignerUiBackend()
+{
+    logos_tx_decoder_free(m_decoder);
+}
+
+// Read the calldata back out of the very text on screen and decode it offline.
+//
+// The keystore hands an approver `render_lines` and nothing else — no
+// structured `to` or `data` — and that turns out to be the right input rather
+// than a limitation: an interpretation derived from the displayed text cannot
+// describe different bytes than the human is reading.
+QStringList SignerUiBackend::interpret(const QStringList &lines) const
+{
+    if (!m_decoder || lines.isEmpty()) {
+        return {};
+    }
+
+    QJsonArray in;
+    for (const QString &l : lines) {
+        in.append(l);
+    }
+    char *raw = logos_tx_decoder_describe_render_lines(
+        m_decoder, QJsonDocument(in).toJson(QJsonDocument::Compact).constData());
+    if (!raw) {
+        return {};
+    }
+    const QJsonObject r = parseObject(QString::fromUtf8(raw));
+    logos_tx_decoder_string_free(raw);
+
+    const QJsonArray legs = r.value(QStringLiteral("legs")).toArray();
+    if (!r.value(QStringLiteral("ok")).toBool() || legs.isEmpty()) {
+        return {};
+    }
+
+    // Label by ITEM count, not by how many decoded. A request of one message
+    // and one transaction decodes to a single leg, and an unlabelled reading of
+    // it would look like a description of the whole request.
+    const bool label = r.value(QStringLiteral("items")).toInt() > 1;
+
+    QStringList out;
+    for (const QJsonValue &v : legs) {
+        const QJsonObject leg = v.toObject();
+        if (label) {
+            out << QStringLiteral("Item [%1]:").arg(leg.value(QStringLiteral("index")).toInt());
+        }
+        for (const QJsonValue &line : leg.value(QStringLiteral("lines")).toArray()) {
+            out << line.toString();
+        }
+    }
+    return out;
+}
+
 void SignerUiBackend::onContextReady()
 {
+    // Null on failure, and that is survivable: every other property is
+    // unaffected and the sheet still renders the keystore's lines.
+    m_decoder = logos_tx_decoder_new();
+
     m_dwell.setSingleShot(true);
     QObject::connect(&m_dwell, &QTimer::timeout, [this] { setDwellElapsed(true); });
     QObject::connect(&m_poll, &QTimer::timeout, [this] { refresh(); });
@@ -162,6 +219,7 @@ void SignerUiBackend::acknowledge(QString handle)
     setRenderedRequester(r.value(QStringLiteral("requester")).toString());
     setRenderedBundleId(r.value(QStringLiteral("bundle_id")).toString());
     setRenderLines(lines);
+    setInterpretationLines(interpret(lines));
     setRenderedHandle(r.value(QStringLiteral("handle")).toString());
     startDwell();
 }
@@ -247,6 +305,9 @@ void SignerUiBackend::clearRendered()
     setRenderedBundleId(QString());
     setRenderedRequester(QString());
     setRenderLines(QStringList());
+    // Must clear with the rest: a reading left behind would describe a request
+    // that is no longer on screen.
+    setInterpretationLines(QStringList());
 }
 
 void SignerUiBackend::startDwell()

@@ -208,8 +208,22 @@ sections:
               # text are stable and say as much.
                 - "Account: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
                 - "Purpose (claimed by the requester): Doc-test: sign one message end to end"
-                - "1 item(s) to sign:"
+                - "2 item(s) to sign:"
                 - "      Text: I authorise the doc-test transfer"
+              timeout: 10000
+
+            - name: "The calldata is decoded on this device, and says so"
+              # The keystore never authored these lines: the backend decoded the
+              # `Data:` line above with the linked-in logos-tx-decoder and
+              # published them separately. VERIFIED is the strong tier -- the
+              # recipient IS the WETH contract on chain 1 in the decoder's own
+              # database, not merely a 4-byte selector that matched.
+              action: wait_for
+              texts:
+                - "Interpretation — decoded on this device, not part of what is signed"
+                - "Item [2]:"
+                - "Interpreted: WETH — VERIFIED (this address is WETH on chain 1, and it declares this function)"
+                - "  Function: transfer(address,uint256)"
               timeout: 10000
               screenshot: "signer-ui-approval.png"
 
@@ -251,7 +265,9 @@ sections:
               # time -- which is why this is the strongest thing this surface can
               # honestly assert.
               action: wait_for
-              texts: ["Approved — 1 item signed"]
+              # TWO items now: the message and the WETH transfer. The backend
+              # pluralises on signed_count, so this is "items", not "item".
+              texts: ["Approved — 2 items signed"]
               timeout: 20000
 
             - name: "The queue is empty again"

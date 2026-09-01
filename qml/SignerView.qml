@@ -119,6 +119,46 @@ Item {
                 font.bold: true
             }
 
+            // What the calldata appears to do, decoded locally from the lines
+            // below. Deliberately set apart and captioned: this is the backend's
+            // reading, and a human must be able to tell it from the keystore's
+            // own words at a glance. Absent entirely when nothing decoded.
+            Rectangle {
+                Layout.fillWidth: true
+                visible: root.ready && backend.interpretationLines.length > 0
+                color: "transparent"
+                border.color: "#8888aa"
+                border.width: 1
+                radius: 4
+                implicitHeight: interpretation.implicitHeight + 16
+
+                ColumnLayout {
+                    id: interpretation
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 2
+
+                    LogosText {
+                        Layout.fillWidth: true
+                        text: "Interpretation — decoded on this device, not part of what is signed"
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        font.italic: true
+                    }
+                    Repeater {
+                        model: root.ready ? backend.interpretationLines : []
+                        delegate: LogosText {
+                            objectName: "interpretationLine"
+                            Layout.fillWidth: true
+                            text: modelData
+                            textFormat: Text.PlainText
+                            wrapMode: Text.Wrap
+                            font.family: "monospace"
+                        }
+                    }
+                }
+            }
+
             // The keystore's lines, one per row, unmodified.
             ScrollView {
                 Layout.fillWidth: true

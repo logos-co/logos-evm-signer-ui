@@ -8,15 +8,24 @@
   "main": "signer_ui_plugin",
   "icon": "src/icons/signer.png",
   "view": "qml/SignerView.qml",
-  "dependencies": ["keystore_module"],
-  "codegen": { "rep": "src/signer_ui.rep" },
-
+  "dependencies": [
+    "keystore_module"
+  ],
+  "codegen": {
+    "rep": "src/signer_ui.rep"
+  },
   "nix": {
     "packages": {
       "build": [],
-      "runtime": ["qt6.qtdeclarative"]
+      "runtime": [
+        "qt6.qtdeclarative"
+      ]
     },
-    "external_libraries": [],
+    "external_libraries": [
+      {
+        "name": "logos_tx_decoder"
+      }
+    ],
     "cmake": {
       "find_packages": [],
       "extra_sources": [],

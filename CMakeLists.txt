@@ -14,6 +14,10 @@ logos_module(
     SOURCES
         src/signer_ui_backend.h
         src/signer_ui_backend.cpp
+    # Offline calldata decoding. A static archive, so it is linked in and no
+    # library file lands beside the plugin for ui-host to mistake for one.
+    EXTERNAL_LIBS
+        logos_tx_decoder
     INCLUDE_DIRS
         src
 )

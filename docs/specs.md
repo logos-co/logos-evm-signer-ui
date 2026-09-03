@@ -3,18 +3,33 @@
 ## What this plugin is
 
 The single approval surface for `keystore_module`. Any number of modules may
-call `request_approval`; only `signer_ui` may `acknowledge`, `approve` or
-`reject`, enforced by the keystore on the platform caller identity.
+call `request_approval`; only the keystore's configured **approver** may
+`acknowledge`, `approve` or `reject`, enforced by the keystore on the platform
+caller identity.
 
-## What the Tier A allowlist entry denotes
+## Where the approver name comes from
 
-> `signer_ui` in the keystore's allowlist names a **plugin package**, not a
+There is no allowlist: the keystore holds exactly **one** approver name, and one
+custodian name beside it. `keystore_module.configure({"approver": …,
+"custodian": …})` sets them, and it is **total** — a role the document does not
+name is held by nobody, so anything configuring the custodian must name the
+approver in the same call or strip it. Until something calls it the built-in
+defaults stand, and this plugin is one of them: `signer_ui` approves,
+`keystore_ui` mutates accounts.
+
+## What the approver role denotes
+
+> `signer_ui` as the configured approver names a **plugin package**, not a
 > person and not a process. A `ui_qml` plugin registers one identity and one
 > token, shared by its QML view and its `ui-host` backend, and a callee resolves
 > both to `module:signer_ui`. The keystore cannot distinguish the view from the
-> backend and does not pretend to. What the entry asserts is that **the operator
+> backend and does not pretend to. What the role asserts is that **the operator
 > designated this package as the code permitted to approve**. It does not assert
 > that a human saw anything, and no token check can make it.
+>
+> And the operator is whoever called `configure` first: the call is ungated for
+> now, so the role records an honest deployer's policy rather than enforcing one
+> against a hostile co-resident module.
 
 ## What the split buys, and what it does not
 

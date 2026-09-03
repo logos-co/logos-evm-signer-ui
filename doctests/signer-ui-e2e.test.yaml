@@ -10,13 +10,15 @@ intro: |
   signer UI — and drives the UI the way a person would, through
   [`logos-qt-mcp`](https://github.com/logos-co/logos-qt-mcp):
 
-  1. `signer_probe` (a Tier B requester) imports a known key and asks for a
+  1. `signer_probe` names who holds the keystore's two roles — `signer_ui`
+     approves, `signer_probe` mutates accounts — in one `configure` call.
+  2. `signer_probe` (a Tier B requester) imports a known key and asks for a
      signature on a message.
-  2. The keystore parks the request and announces it.
-  3. `signer_ui` — the only module allowed to approve — acknowledges receipt and
+  3. The keystore parks the request and announces it.
+  4. `signer_ui` — the only module allowed to approve — acknowledges receipt and
      renders **the keystore's own words**, verbatim.
-  4. The password is typed into the UI and Approve is clicked.
-  5. The requester collects a real secp256k1 signature with its receipt.
+  5. The password is typed into the UI and Approve is clicked.
+  6. The requester collects a real secp256k1 signature with its receipt.
 
   Every refusal on the way is asserted too, because they are the design: the
   requester can ask and collect but can never approve, and nothing signs until
@@ -26,7 +28,8 @@ what_you_build: "The keystore, the signer UI and a requesting module, run togeth
 
 what_you_learn:
   - "Why signing needs an approver at all — and what the keystore shows the human"
-  - "How Tier A (approve) and Tier B (request) are separated by caller identity"
+  - "How Tier A (approve), Tier B (request) and Tier D (account mutation) are separated by caller identity"
+  - "Why naming one keystore role means naming both, and what an unnamed role admits"
   - "Why the requester re-offers when nobody is listening, and what it tells the user"
   - "How to drive a Logos UI plugin headlessly and assert on what it rendered"
 
@@ -42,7 +45,9 @@ sections:
       Three modules and a host. `signer_probe` is a doc-test fixture that lives
       in this repo: something has to *ask* for a signature, and it has to be a
       named module, because Tier B refuses the host anchor and therefore refuses
-      the CLI.
+      the CLI. It also imports the key it later asks to sign with, which is
+      account mutation — so it has to hold the keystore's custodian role too;
+      the next section is where that is arranged.
     steps:
       - title: "The host and the test driver"
         run: |
@@ -157,6 +162,49 @@ sections:
       - `QML_INSPECTOR_PORT=3768` — the QML inspector is compiled in but only
         listens when this is set.
     steps:
+      - title: "Name who holds the two keystore roles"
+        text: |
+          Nothing here may touch the keystore until it is told who holds its two
+          roles. `keystore_module` gates **approval** (Tier A: `pending`,
+          `acknowledge`, `approve`, `reject`) on a configured *approver*, and
+          **account mutation** (Tier D: `import_private_key` and its siblings)
+          on a configured *custodian*. `signer_probe` imports a key, so it needs
+          the second one — without it the run stops on its very first call with
+          the keystore's uniform refusal, `not authorized`.
+
+          So `signer_probe` makes one call before anything else, naming both:
+
+          ```json
+          keystore_module.configure({"approver": "signer_ui", "custodian": "signer_probe"})
+          ```
+
+          **Both roles in the one call, deliberately.** `configure` is *total*,
+          not a patch: the document is the whole answer to who holds these roles,
+          so one it does not name is held by **nobody** — an empty name admits no
+          caller. Naming only the custodian would strip the approver, and Tier A
+          would then refuse `signer_ui` itself, which is the half of this
+          doc-test that matters.
+
+          **Who gets which, and why.** The approver stays `signer_ui`: it is the
+          subject here, the surface a human reads and clicks, and moving that
+          role anywhere else would leave nothing to test. The custodian is
+          `signer_probe`, because in this staged tree there is no other
+          candidate — production's custodian is `keystore_ui`, which is not
+          installed here, and a role naming an absent module admits nobody.
+
+          Two honest caveats. `configure` is **ungated for now**, so this is the
+          requester writing the policy that then constrains it; nothing stops a
+          hostile co-resident module doing the same, and the protection is
+          deferred rather than refuted. And the fixture wears both hats, which
+          production would not: a wallet asks for signatures and reads which
+          accounts exist, and never imports a key.
+
+          The call comes from the module rather than a command line because
+          `logos-standalone-app` has no CLI — and the host anchor a CLI
+          authenticates as is refused by Tier B regardless, which is why
+          `signer_probe` exists at all. It takes effect on the next call;
+          nothing is reloaded.
+
       - title: "Launch, approve, and collect the signature"
         # Timeouts below must SUM to well under 120s: the runner caps the whole
         # UI driver with run_cmd(..., timeout=120), so blowing that budget kills

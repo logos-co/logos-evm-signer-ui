@@ -6,12 +6,22 @@
     # The only MODULE dependency, deliberately. This plugin has no client for
     # any wallet, chain, RPC or token-list module, so it cannot ask anyone what
     # an intent means — it renders the lines the keystore authored.
-    keystore_module.url = "github:logos-co/logos-evm-keystore-module";
+    keystore_module = {
+      url = "github:logos-co/logos-evm-keystore-module";
+      # Without the follows it drags its own module-builder, and a skewed generated
+      # ABI segfaults the module inside provider init.
+      inputs.logos-module-builder.follows = "logos-module-builder";
+    };
 
     # Offline calldata decoding, linked in as a static archive. A library, not a
     # module: nothing is asked of the network or of another process, so what the
     # human reads still depends on this plugin alone.
-    logos-tx-decoder.url = "github:logos-co/logos-tx-decoder";
+    logos-tx-decoder = {
+      url = "github:logos-co/logos-tx-decoder";
+      # It builds the archive against logos-module-builder.inputs.nixpkgs; without the
+      # follows that is a SECOND nixpkgs, and the .a is linked into this plugin.
+      inputs.logos-module-builder.follows = "logos-module-builder";
+    };
   };
 
   outputs = inputs@{ logos-module-builder, ... }:

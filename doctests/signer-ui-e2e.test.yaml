@@ -165,12 +165,12 @@ sections:
       - title: "Name who holds the two keystore roles"
         text: |
           Nothing here may touch the keystore until it is told who holds its two
-          roles. `keystore_module` gates **approval** (Tier A: `acknowledge`,
-          `approve`, `reject`) on a configured *approver*, and **account
-          mutation** (Tier D: `import_private_key` and its siblings) on a
-          configured *custodian*. `signer_probe` imports a key, so it needs the
-          second one — without it the run stops on its very first call with the
-          keystore's uniform refusal, `not authorized`.
+          roles. `keystore_module` gates **approval** (Tier A: `pending`,
+          `acknowledge`, `approve`, `reject`) on a configured *approver*, and
+          **account mutation** (Tier D: `import_private_key` and its siblings)
+          on a configured *custodian*. `signer_probe` imports a key, so it needs
+          the second one — without it the run stops on its very first call with
+          the keystore's uniform refusal, `not authorized`.
 
           So `signer_probe` makes one call before anything else, naming both:
 

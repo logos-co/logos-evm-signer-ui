@@ -29,7 +29,7 @@ public:
     ~SignerUiBackend() override;
 
     void refresh() override;
-    void acknowledge(QString handle) override;
+    bool acknowledge(QString handle) override;
     bool approve(QString handle, QString bundleId, QString password) override;
     bool reject(QString handle) override;
     void dismiss() override;

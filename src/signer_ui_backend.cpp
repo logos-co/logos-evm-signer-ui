@@ -112,10 +112,15 @@ void SignerUiBackend::onContextReady()
     // normal place to call out from and needs no such treatment -- that is the
     // documented pattern, and arming these subscriptions from there is fine.
     modules().keystore_module.onApproval_offered([this](QString) { refreshSoon(); });
-    modules().keystore_module.onApproval_settled([this](QString handle, QString) {
+    modules().keystore_module.onApproval_settled([this](QString handle, QString state) {
         if (handle == renderedHandle()) {
             clearRendered();
         }
+        // Relayed so the view can end an intent it is holding for this handle. The keystore
+        // event is the only place that sees EVERY way a request ends -- this sheet, the
+        // queue by hand, or a surface that is not this one -- and an intent answered from a
+        // button instead would stay open whenever the human took another route.
+        emit settled(handle, state);
         refreshSoon();
     });
 
@@ -198,13 +203,13 @@ void SignerUiBackend::refresh()
     }
 }
 
-void SignerUiBackend::acknowledge(QString handle)
+bool SignerUiBackend::acknowledge(QString handle)
 {
     const QJsonObject r = parseObject(modules().keystore_module.acknowledge(handle));
     if (!r.value(QStringLiteral("ok")).toBool()) {
         setLastError(r.value(QStringLiteral("error")).toString(QStringLiteral("could not open that request")));
         clearRendered();
-        return;
+        return false;
     }
 
     // Verbatim. The keystore is the only party that parsed the intent, so it is
@@ -222,6 +227,7 @@ void SignerUiBackend::acknowledge(QString handle)
     setInterpretationLines(interpret(lines));
     setRenderedHandle(r.value(QStringLiteral("handle")).toString());
     startDwell();
+    return true;
 }
 
 bool SignerUiBackend::approve(QString handle, QString bundleId, QString password)

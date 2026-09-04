@@ -38,10 +38,57 @@ Item {
     // with a backend that is in fact working.
     property bool ready: false
 
+    // Intents being serviced, keyed by the keystore handle each one named. A provider can
+    // be dispatched more than once while a request is open and `acknowledge` shows exactly
+    // one at a time, so this is what lets a displaced request be answered now rather than
+    // left to the shell's ten-minute backstop.
+    property var intentByHandle: ({})
+
+    function answerIntent(handle, ok, error) {
+        var id = root.intentByHandle[handle]
+        if (id === undefined) return
+        delete root.intentByHandle[handle]
+        // Nothing renderable goes back. The requester learns the outcome from its own data
+        // source; what it gets here is that the request ended, and how.
+        logos.respond(id, ok, ({}), error)
+    }
+
     Connections {
         target: logos
         function onViewModuleReadyChanged(moduleName, isReady) {
             if (moduleName === "signer_ui") root.ready = isReady && root.backend !== null
+        }
+
+        function onIntentRequested(requestId, intent, params, requesterName) {
+            if (intent !== "evm.signing.approve") return
+
+            // Acknowledging demotes whatever is on screen, so an intent held for THAT
+            // request is about to be displaced. End it here: its keystore record is
+            // untouched and its requester falls back to waiting, which is a better answer
+            // than one that arrives as `timeout` ten minutes later.
+            var shown = root.ready ? backend.renderedHandle : ""
+            if (shown !== "" && shown !== params.handle)
+                root.answerIntent(shown, false, "cancelled")
+
+            root.intentByHandle[params.handle] = requestId
+            logos.watch(backend.acknowledge(params.handle), function (opened) {
+                // A handle this keystore does not hold, or one already settled. No retry of
+                // the same payload fixes that, which is what `bad_request` means — and it is
+                // deliberately the same answer the shell gives for a payload it refused
+                // itself, so neither reveals whether the other was consulted.
+                if (!opened) root.answerIntent(params.handle, false, "bad_request")
+            })
+        }
+    }
+
+    // The authoritative end of a request, whichever way it ended. Answering from the buttons
+    // below instead would leave an intent open whenever the human settled it from the queue,
+    // or from a surface that is not this one.
+    Connections {
+        target: root.ready ? root.backend : null
+        function onSettled(handle, state) {
+            var approved = state === "approved"
+            root.answerIntent(handle, approved, approved ? "" : "cancelled")
         }
     }
     Component.onCompleted: root.ready = root.backend !== null && logos.isViewModuleReady("signer_ui")
@@ -211,7 +258,14 @@ Item {
                 }
                 LogosButton {
                     text: "Back"
-                    onClicked: { backend.dismiss(); pw.text = "" }
+                    // Read the handle BEFORE dismissing, which clears it. Walking away
+                    // without deciding leaves the request queued, so the requester is told
+                    // the same thing the user just did: not now.
+                    onClicked: {
+                        root.answerIntent(backend.renderedHandle, false, "cancelled")
+                        backend.dismiss()
+                        pw.text = ""
+                    }
                 }
                 Item { Layout.fillWidth: true }
                 LogosButton {

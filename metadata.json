@@ -11,6 +11,19 @@
   "dependencies": [
     "keystore_module"
   ],
+  "provides": [
+    {
+      "intent": "evm.signing.approve",
+      "params": [
+        {
+          "name": "handle",
+          "type": "string",
+          "required": true,
+          "description": "The keystore's own name for the approval record to show"
+        }
+      ]
+    }
+  ],
   "codegen": {
     "rep": "src/signer_ui.rep"
   },

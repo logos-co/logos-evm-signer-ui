@@ -253,10 +253,12 @@ Item {
                 Layout.fillWidth: true
                 spacing: 8
                 LogosButton {
+                    objectName: "signerRejectButton"
                     text: "Reject"
                     onClicked: { backend.reject(backend.renderedHandle); pw.text = "" }
                 }
                 LogosButton {
+                    objectName: "signerBackButton"
                     text: "Back"
                     // Read the handle BEFORE dismissing, which clears it. Walking away
                     // without deciding leaves the request queued, so the requester is told
@@ -270,6 +272,7 @@ Item {
                 Item { Layout.fillWidth: true }
                 LogosButton {
                     id: approveBtn
+                    objectName: "signerApproveButton"
                     // The dwell flag is owned by C++, so editing this binding
                     // cannot shorten it; the backend refuses early approvals
                     // regardless of what the view believes.

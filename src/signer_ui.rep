@@ -52,12 +52,19 @@ class SignerUi
 
     // Re-read the queue from the keystore.
     SLOT(void refresh())
-    // Claim a request for display. Demotes whatever was rendered before.
-    SLOT(void acknowledge(QString handle))
+    // Claim a request for display. Demotes whatever was rendered before. False for a
+    // handle the keystore does not hold, or one already settled — which a caller pointed
+    // here by an intent has to be able to tell apart from a request it can service.
+    SLOT(bool acknowledge(QString handle))
     // The human said yes. `bundleId` must be the value that was displayed.
     SLOT(bool approve(QString handle, QString bundleId, QString password))
     // The human said no.
     SLOT(bool reject(QString handle))
     // Close the sheet without deciding (the request stays queued).
     SLOT(void dismiss())
+
+    // A request reached a terminal state: `approved` or `rejected`. Relayed verbatim from
+    // the keystore's own event, so it fires however the request settled — from this sheet,
+    // from the queue by hand, or from a surface that is not this one at all.
+    SIGNAL(settled(QString handle, QString state))
 }

@@ -26,6 +26,55 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The intent half, with no shell, no host and no keystore. Minutes, not the two hours
+  # the e2e spec below needs, and it reaches the one thing that spec structurally cannot:
+  # `logos-standalone-app` has no broker, so nothing there can dispatch an intent.
+  view-probe:
+    name: signer-ui view probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # Not a flake input: the design system is static-linked into the host binary, so this
+      # plugin declares nothing. Its SOURCE is still what the probe needs to resolve Logos.*.
+      - uses: actions/checkout@v4
+        with:
+          repository: logos-co/logos-design-system
+          path: .design-system
+
+      - uses: cachix/install-nix-action@v27
+
+      - name: doctests/run_view_probe.sh
+        shell: bash
+        env:
+          LOGOS_DESIGN_SYSTEM_QML: ${{ github.workspace }}/.design-system/src/qml
+          # nixpkgs builds Qt with -DQT_FEATURE_journald=ON, and Qt then routes every message
+          # to journald whenever stderr is not a tty -- which on a runner it never is. Without
+          # this the probe asserts into a journal nobody reads and prints a header with
+          # silence under it. Its exit code would still decide the job, but the count below
+          # could not be checked, and a header over silence is what a dead probe looks like.
+          QT_LOGGING_TO_CONSOLE: "1"
+        run: |
+          set -euo pipefail
+          nix shell nixpkgs#qt6.qtdeclarative -c bash -c '
+            d=$(dirname $(dirname $(readlink -f $(command -v qml))))
+            QML_BIN="$d/bin/qml" QT_QML_DIR="$d/lib/qt-6/qml" \
+              ./doctests/run_view_probe.sh' 2>&1 | tee /tmp/probe.log
+          # SKIP is exit 0 by design -- right for a developer, wrong here.
+          if grep -q "SKIP" /tmp/probe.log; then
+            echo "::error::the view probe skipped instead of running"; exit 1
+          fi
+          grep -q -- "--- probe_intents.qml" /tmp/probe.log \
+            || { echo "::error::probe never ran: probe_intents"; exit 1; }
+          # A probe that dies half way prints its header and nothing else, and only one that
+          # reaches its last phase prints a RESULT. Assert both that and a floor on the
+          # assertions, so a file that stops asserting cannot pass by staying quiet.
+          grep -q "RESULT: ALL PASS" /tmp/probe.log \
+            || { echo "::error::the probe did not sign off"; exit 1; }
+          n=$(grep -c "  PASS  " /tmp/probe.log)
+          echo "assertions: $n"; [ "$n" -ge 24 ]
+
   doctests:
     name: signer-ui doc-tests (${{ matrix.os }})
     strategy:

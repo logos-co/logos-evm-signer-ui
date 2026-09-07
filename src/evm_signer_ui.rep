@@ -6,8 +6,11 @@
 // a boundary crossing. Every OTHER ui .rep must be free of password parameters,
 // and CI asserts that.
 //
-// `renderLines` is whatever the keystore returned, verbatim. The backend may not
-// reformat, elide, truncate or re-order it. That is the authoritative text.
+// The keystore returns its lines in TWO lists, and this surface keeps them apart:
+// `claimLines` is what the requester SAYS the request is for, `renderLines` is what
+// is actually signed. Both verbatim — the backend may not reformat, elide, truncate
+// or re-order either. Merging them would put requester-authored text in the
+// keystore's typeface, which is the confusion the split exists to prevent.
 //
 // `interpretationLines` is the ONE exception, and it is constrained rather than
 // free-form. The backend decodes calldata locally (logos-tx-decoder, linked in,
@@ -40,6 +43,7 @@ class EvmSignerUi
     PROP(QString renderedHandle="" READONLY)
     PROP(QString renderedBundleId="" READONLY)
     PROP(QString renderedRequester="" READONLY)
+    // What is actually signed, and the commitment over it.
     PROP(QStringList renderLines READONLY)
 
     // What the REQUESTER claims this is for, verbatim. The keystore returns it

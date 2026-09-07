@@ -245,6 +245,18 @@ sections:
               # instead, which are now bounded by real mechanisms.
               timeout: 35000
 
+            - name: "The screen is in three sections, and says which is whose"
+              # The keystore returns its lines in two lists and this view keeps them
+              # apart. probe_sections.qml asserts the separation against a fabricated
+              # backend; this asserts the headings a human actually reads, with a real
+              # keystore behind them. Section 1's heading carries the requester's name
+              # and so is asserted by the requester line below instead.
+              action: wait_for
+              texts:
+                - "2.  What you are signing"
+                - "3.  What this signer makes of section 2"
+              timeout: 10000
+
             - name: "The human is shown the keystore's own words, not the requester's"
               action: wait_for
               texts:

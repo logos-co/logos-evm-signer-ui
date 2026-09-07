@@ -102,6 +102,7 @@ Item {
         property string renderedHandle: ""
         property string renderedBundleId: ""
         property string renderedRequester: ""
+        property var claimLines: []
         property var renderLines: []
         property var interpretationLines: []
         property bool dwellElapsed: true
@@ -127,7 +128,8 @@ Item {
             fake.renderedHandle = handle
             fake.renderedBundleId = probe.bundleA
             fake.renderedRequester = "eth_wallet_backend"
-            fake.renderLines = ["Account: 0xf39F…2266", "Send 0.1 ETH"]
+            fake.claimLines = ["Purpose (claimed by the requester): Send 0.1 ETH to Alice"]
+            fake.renderLines = ["Account: 0xf39F…2266", "Commitment: abcd", "Send 0.1 ETH"]
             return true
         }
 

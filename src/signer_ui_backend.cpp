@@ -219,10 +219,17 @@ bool SignerUiBackend::acknowledge(QString handle)
     for (const QJsonValue &v : r.value(QStringLiteral("render_lines")).toArray()) {
         lines << v.toString();
     }
+    // Kept in its own list all the way to the view. Appending it to `lines` here would
+    // undo the separation the keystore made and hand the decoder requester-authored text.
+    QStringList claims;
+    for (const QJsonValue &v : r.value(QStringLiteral("claim_lines")).toArray()) {
+        claims << v.toString();
+    }
 
     setLastError(QString());
     setRenderedRequester(r.value(QStringLiteral("requester")).toString());
     setRenderedBundleId(r.value(QStringLiteral("bundle_id")).toString());
+    setClaimLines(claims);
     setRenderLines(lines);
     setInterpretationLines(interpret(lines));
     setRenderedHandle(r.value(QStringLiteral("handle")).toString());
@@ -310,6 +317,7 @@ void SignerUiBackend::clearRendered()
     setRenderedHandle(QString());
     setRenderedBundleId(QString());
     setRenderedRequester(QString());
+    setClaimLines(QStringList());
     setRenderLines(QStringList());
     // Must clear with the rest: a reading left behind would describe a request
     // that is no longer on screen.

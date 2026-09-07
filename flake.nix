@@ -7,7 +7,8 @@
     # any wallet, chain, RPC or token-list module, so it cannot ask anyone what
     # an intent means — it renders the lines the keystore authored.
     keystore_module = {
-      url = "github:logos-co/logos-evm-keystore-module";
+      # TEMPORARY PIN — revert to the bare URL when `claim_lines` merges.
+      url = "github:logos-co/logos-evm-keystore-module/feat/split-claim-from-signed";
       # Without the follows it drags its own module-builder, and a skewed generated
       # ABI segfaults the module inside provider init.
       inputs.logos-module-builder.follows = "logos-module-builder";

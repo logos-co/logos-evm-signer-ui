@@ -65,15 +65,20 @@ jobs:
           if grep -q "SKIP" /tmp/probe.log; then
             echo "::error::the view probe skipped instead of running"; exit 1
           fi
-          grep -q -- "--- probe_intents.qml" /tmp/probe.log \
-            || { echo "::error::probe never ran: probe_intents"; exit 1; }
+          for probe in probe_intents probe_sections; do
+            grep -q -- "--- $probe.qml" /tmp/probe.log \
+              || { echo "::error::probe never ran: $probe"; exit 1; }
+          done
           # A probe that dies half way prints its header and nothing else, and only one that
           # reaches its last phase prints a RESULT. Assert both that and a floor on the
           # assertions, so a file that stops asserting cannot pass by staying quiet.
-          grep -q "RESULT: ALL PASS" /tmp/probe.log \
-            || { echo "::error::the probe did not sign off"; exit 1; }
+          r=$(grep -c "RESULT: ALL PASS" /tmp/probe.log)
+          [ "$r" -ge 2 ] || { echo "::error::only $r probe(s) signed off"; exit 1; }
+          if grep -q "RESULT: FAILURES" /tmp/probe.log; then
+            echo "::error::a probe reported failures"; exit 1
+          fi
           n=$(grep -c "  PASS  " /tmp/probe.log)
-          echo "assertions: $n"; [ "$n" -ge 24 ]
+          echo "assertions: $n"; [ "$n" -ge 38 ]
 
   doctests:
     name: signer-ui doc-tests (${{ matrix.os }})

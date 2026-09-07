@@ -97,6 +97,59 @@ Item {
     }
     readonly property bool showing: ready && backend.renderedHandle !== ""
 
+    component Section: Rectangle {
+        id: sec
+        property int number: 0
+        property string heading: ""
+        property string caption: ""
+        default property alias content: body.data
+        Layout.fillWidth: true
+        color: "transparent"
+        border.color: "#8888aa"
+        border.width: 1
+        radius: 4
+        implicitHeight: inner.implicitHeight + 20
+
+        ColumnLayout {
+            id: inner
+            anchors.fill: parent
+            anchors.margins: 10
+            spacing: 4
+
+            LogosText {
+                Layout.fillWidth: true
+                text: sec.number + ".  " + sec.heading
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                font.bold: true
+            }
+            LogosText {
+                Layout.fillWidth: true
+                visible: sec.caption !== ""
+                text: sec.caption
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                font.italic: true
+                opacity: 0.75
+            }
+            ColumnLayout {
+                id: body
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                spacing: 2
+            }
+        }
+    }
+
+    // A line of the keystore's or the requester's text. Monospace and plain: see
+    // the rendering rule at the top of this file.
+    component Line: LogosText {
+        Layout.fillWidth: true
+        textFormat: Text.PlainText
+        wrapMode: Text.Wrap
+        font.family: "monospace"
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 16
@@ -153,75 +206,89 @@ Item {
         }
 
         // ── the request under review ────────────────────────────────────────
+        //
+        // Three sections, in this order and never merged: who is asking and what THEY
+        // say it is for; what is actually signed; and what this signer makes of that.
+        // The first is requester-authored, the second is the keystore's, the third is
+        // this backend's — and a human has to be able to tell them apart at a glance,
+        // because the whole class of attack here is text that looks like it came from
+        // somewhere more trustworthy than it did.
         ColumnLayout {
             visible: root.showing
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 8
+            spacing: 10
 
-            LogosText {
-                Layout.fillWidth: true
-                text: "Requested by: " + (root.ready ? backend.renderedRequester : "")
-                textFormat: Text.PlainText
-                font.bold: true
-            }
-
-            // What the calldata appears to do, decoded locally from the lines
-            // below. Deliberately set apart and captioned: this is the backend's
-            // reading, and a human must be able to tell it from the keystore's
-            // own words at a glance. Absent entirely when nothing decoded.
-            Rectangle {
-                Layout.fillWidth: true
-                visible: root.ready && backend.interpretationLines.length > 0
-                color: "transparent"
-                border.color: "#8888aa"
-                border.width: 1
-                radius: 4
-                implicitHeight: interpretation.implicitHeight + 16
-
-                ColumnLayout {
-                    id: interpretation
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 2
-
-                    LogosText {
-                        Layout.fillWidth: true
-                        text: "Interpretation — decoded on this device, not part of what is signed"
-                        textFormat: Text.PlainText
-                        wrapMode: Text.Wrap
-                        font.italic: true
-                    }
-                    Repeater {
-                        model: root.ready ? backend.interpretationLines : []
-                        delegate: LogosText {
-                            objectName: "interpretationLine"
-                            Layout.fillWidth: true
-                            text: modelData
-                            textFormat: Text.PlainText
-                            wrapMode: Text.Wrap
-                            font.family: "monospace"
-                        }
-                    }
-                }
-            }
-
-            // The keystore's lines, one per row, unmodified.
             ScrollView {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
+
                 ColumnLayout {
                     width: parent.width
-                    spacing: 2
-                    Repeater {
-                        model: root.ready ? backend.renderLines : []
-                        delegate: LogosText {
-                            Layout.fillWidth: true
-                            text: modelData
-                            textFormat: Text.PlainText
-                            wrapMode: Text.Wrap
-                            font.family: "monospace"
+                    spacing: 10
+
+                    Section {
+                        objectName: "sectionRequester"
+                        number: 1
+                        heading: "Requested by: " + (root.ready ? backend.renderedRequester : "")
+                        caption: "What that app says this is for. Its own words — this " +
+                                 "signer cannot check any of it."
+
+                        Repeater {
+                            model: root.ready ? backend.claimLines : []
+                            delegate: Line {
+                                objectName: "claimLine"
+                                text: modelData
+                            }
+                        }
+                        Line {
+                            objectName: "noClaimLine"
+                            visible: root.ready && backend.claimLines.length === 0
+                            text: "(it gave no reason)"
+                            font.family: "sans-serif"
+                            font.italic: true
+                        }
+                    }
+
+                    Section {
+                        objectName: "sectionSigned"
+                        number: 2
+                        heading: "What you are signing"
+                        caption: "The keystore's own reading of the request, shown in " +
+                                 "full and never shortened. This is what the signature " +
+                                 "will cover."
+
+                        Repeater {
+                            model: root.ready ? backend.renderLines : []
+                            delegate: Line {
+                                objectName: "renderLine"
+                                text: modelData
+                            }
+                        }
+                    }
+
+                    Section {
+                        objectName: "sectionInterpretation"
+                        number: 3
+                        heading: "What this signer makes of section 2"
+                        caption: "Decoded on this device from the lines above. Not part " +
+                                 "of what is signed, and every line says how sure it is."
+
+                        Repeater {
+                            model: root.ready ? backend.interpretationLines : []
+                            delegate: Line {
+                                objectName: "interpretationLine"
+                                text: modelData
+                            }
+                        }
+                        Line {
+                            objectName: "noInterpretationLine"
+                            visible: root.ready && backend.interpretationLines.length === 0
+                            text: "(nothing could be decoded — which is normal for a " +
+                                  "message, a digest, or a call this signer does not know)"
+                            font.family: "sans-serif"
+                            font.italic: true
                         }
                     }
                 }

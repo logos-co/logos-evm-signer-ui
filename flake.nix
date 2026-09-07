@@ -18,7 +18,8 @@
     # module: nothing is asked of the network or of another process, so what the
     # human reads still depends on this plugin alone.
     logos-tx-decoder = {
-      url = "github:logos-co/logos-tx-decoder";
+      # TEMPORARY PIN — revert to the bare URL when the units line merges.
+      url = "github:logos-co/logos-tx-decoder/feat/token-decimals";
       # It builds the archive against logos-module-builder.inputs.nixpkgs; without the
       # follows that is a SECOND nixpkgs, and the .a is linked into this plugin.
       inputs.logos-module-builder.follows = "logos-module-builder";

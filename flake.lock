@@ -11143,15 +11143,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1788206823,
-        "narHash": "sha256-6xPNvYTQ2hao/agYPtrQ8xAruE4BFvZHtLJ48cRqoQU=",
+        "lastModified": 1788748584,
+        "narHash": "sha256-/0gPTrjCT6TkOE7wKCmw94nZVavGq9yT1MVMlm+Q30g=",
         "owner": "logos-co",
         "repo": "logos-tx-decoder",
-        "rev": "ec9e434d2998f041aeea196d0ad22375d6820237",
+        "rev": "17f73e6ff65e4bd82cc11cc906be466efbb2ebbe",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
+        "ref": "feat/token-decimals",
         "repo": "logos-tx-decoder",
         "type": "github"
       }

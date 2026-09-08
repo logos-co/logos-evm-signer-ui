@@ -175,7 +175,7 @@ sections:
           So `signer_probe` makes one call before anything else, naming both:
 
           ```json
-          keystore_module.configure({"approver": "signer_ui", "custodian": "signer_probe"})
+          keystore_module.configure({"approvers": "signer_ui", "custodians": "signer_probe"})
           ```
 
           **Both roles in the one call, deliberately.** `configure` is *total*,

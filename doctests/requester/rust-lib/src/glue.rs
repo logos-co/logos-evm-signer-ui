@@ -29,11 +29,12 @@ const TEST_KEY: &str = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7b
 const VAULT_PASSWORD: &str = "doctest-pw";
 const MESSAGE: &str = "I authorise the doc-test transfer";
 
-/// Who holds the keystore's two roles here. The approver stays `signer_ui` — it is
+/// Who holds the keystore's two roles here. Each is a LIST; a bare string is the
+/// common single-holder spelling `configure` normalises up. The approver stays `signer_ui` — it is
 /// the surface under test. The custodian is this fixture: `keystore_ui` is not in
 /// this tree, and a role naming a module that is not there admits nobody, so the
 /// key import below would be refused.
-const ROLES: &str = r#"{"approver":"signer_ui","custodian":"signer_probe"}"#;
+const ROLES: &str = r#"{"approvers":"signer_ui","custodians":"signer_probe"}"#;
 
 /// Printed on stdout so the doc-test can assert on the app log without needing
 /// a CLI — Basecamp has none.

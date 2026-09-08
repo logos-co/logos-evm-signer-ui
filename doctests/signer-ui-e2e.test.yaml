@@ -395,7 +395,7 @@ sections:
           # attaches to the LEFTOVER SIGNER UI -- which has no shell text. That
           # surfaces as `Expected texts not found: ["Workspace"]` and reads
           # exactly like a wrong label, which is how it was misdiagnosed twice.
-          # Measured: Basecamp itself paints "Workspace", "Welcome back" and the
+          # Measured: Basecamp itself paints "Workspace", "Welcome Back," and the
           # signer_ui tile at t=4.0-4.2s, so a missing shell is never slowness.
           setup:
             - |
@@ -418,13 +418,13 @@ sections:
           launch_timeout: 600
           tests:
             - name: "The shell is up and the app list has been scanned"
-              # "Welcome back" replaces "Welcome to Basecamp!" only once the
+              # "Welcome Back," replaces "Welcome to Basecamp!" only once the
               # launcher model is POPULATED -- i.e. the plugin directory has been
               # scanned and the signer_ui tile exists. Waiting on "Workspace"
               # alone proves the shell painted, not that there is anything to
               # click, so the click below would race the scan.
               action: wait_for
-              texts: ["Welcome back", "Workspace"]
+              texts: ["Welcome Back,", "Workspace"]
               # Measured at t=4.1s against this exact build and staged tree, so
               # 30s is ~7x margin. A failure here means the driver is talking to
               # the wrong app, not that Basecamp is slow -- raising this number

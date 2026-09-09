@@ -9,13 +9,16 @@ caller identity.
 
 ## Where the approver name comes from
 
-There is no allowlist: the keystore holds exactly **one** approver name, and one
-custodian name beside it. `keystore_module.configure({"approver": …,
-"custodian": …})` sets them, and it is **total** — a role the document does not
-name is held by nobody, so anything configuring the custodian must name the
-approver in the same call or strip it. Until something calls it the built-in
-defaults stand, and this plugin is one of them: `evm_signer_ui` approves,
-`evm_keystore_ui` mutates accounts.
+The keystore holds a **set** of approver names, and a set of custodian names
+beside it, so a terminal signer can approve *alongside* this plugin rather than
+by displacing it. `keystore_module.configure({"approvers": […], "custodians":
+[…]})` sets them: each key takes a list of module names, or a bare name where one
+is the whole answer, and the pre-list `"approver"`/`"custodian"` keys are refused
+rather than ignored. The call is **total**, not a patch — a role the document
+does not name is held by nobody, so anything configuring the custodians must
+restate the approvers in the same call or strip them. Until something calls it
+the built-in defaults stand, and this plugin is one of them: `evm_signer_ui`
+approves, `evm_keystore_ui` mutates accounts.
 
 ## What the approver role denotes
 

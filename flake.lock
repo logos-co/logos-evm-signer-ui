@@ -160,11 +160,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1788461421,
-        "narHash": "sha256-0TNwHBZ57vLIjyN++HDV9w8letYprNNbhcTAT30hxKI=",
+        "lastModified": 1788908617,
+        "narHash": "sha256-YxQioEmbtpjnI3ecrRTfA5fr4BIZH2viClQAlNK5Hvs=",
         "owner": "logos-co",
         "repo": "logos-evm-keystore-module",
-        "rev": "e8fff7df5aef2326e8854ac2fc421ba20df73ced",
+        "rev": "2d8fb2307bd9264acaee64017cf28586dacc304d",
         "type": "github"
       },
       "original": {
@@ -11094,11 +11094,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1788206823,
-        "narHash": "sha256-6xPNvYTQ2hao/agYPtrQ8xAruE4BFvZHtLJ48cRqoQU=",
+        "lastModified": 1788921199,
+        "narHash": "sha256-0mb1MMUhABvxqry9ulTpmIR6f5AEPiZkvFYMR9Enff4=",
         "owner": "logos-co",
         "repo": "logos-tx-decoder",
-        "rev": "ec9e434d2998f041aeea196d0ad22375d6820237",
+        "rev": "6abf44ee1e28f0c2d9268ed500c36a69ba71c62d",
         "type": "github"
       },
       "original": {

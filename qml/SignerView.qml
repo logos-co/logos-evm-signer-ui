@@ -28,7 +28,7 @@ Item {
         color: Theme.palette.background
     }
 
-    readonly property var backend: logos.module("signer_ui")
+    readonly property var backend: logos.module("evm_signer_ui")
 
     // `ready` must be a writable property fed by the bridge's signal, NOT a
     // binding. `logos.isViewModuleReady(...)` is a function call, and a
@@ -56,7 +56,7 @@ Item {
     Connections {
         target: logos
         function onViewModuleReadyChanged(moduleName, isReady) {
-            if (moduleName === "signer_ui") root.ready = isReady && root.backend !== null
+            if (moduleName === "evm_signer_ui") root.ready = isReady && root.backend !== null
         }
 
         function onIntentRequested(requestId, intent, params, requesterName) {
@@ -91,7 +91,7 @@ Item {
             root.answerIntent(handle, approved, approved ? "" : "cancelled")
         }
     }
-    Component.onCompleted: root.ready = root.backend !== null && logos.isViewModuleReady("signer_ui")
+    Component.onCompleted: root.ready = root.backend !== null && logos.isViewModuleReady("evm_signer_ui")
     readonly property var queue: {
         try { return JSON.parse(backend ? backend.pendingJson : "[]") } catch (e) { return [] }
     }

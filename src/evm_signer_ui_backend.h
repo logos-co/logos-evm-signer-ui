@@ -6,7 +6,7 @@
 #include <QDateTime>
 #include <QTimer>
 
-#include "rep_signer_ui_source.h"
+#include "rep_evm_signer_ui_source.h"
 #include "logos_ui_plugin_context.h"
 
 struct LogosTxDecoder;
@@ -22,11 +22,11 @@ struct LogosTxDecoder;
 // lines, offline, via the linked-in logos-tx-decoder, and publishes the reading
 // separately as `interpretationLines`. It still has no client for any wallet or
 // chain module, so the decode can only ever describe bytes already on screen.
-class SignerUiBackend : public SignerUiSimpleSource,
-                        public LogosUiPluginContext
+class EvmSignerUiBackend : public EvmSignerUiSimpleSource,
+                           public LogosUiPluginContext
 {
 public:
-    ~SignerUiBackend() override;
+    ~EvmSignerUiBackend() override;
 
     void refresh() override;
     bool acknowledge(QString handle) override;

@@ -1,4 +1,4 @@
-name: signer-ui Doc-Tests
+name: evm-signer-ui Doc-Tests
 
 # Runs this repo's executable doc-test(s) end-to-end via the shared `doctest`
 # CLI (github:logos-co/logos-doctest) on every PR and push to main, publishes a
@@ -30,7 +30,7 @@ jobs:
   # the e2e spec below needs, and it reaches the one thing that spec structurally cannot:
   # `logos-standalone-app` has no broker, so nothing there can dispatch an intent.
   view-probe:
-    name: signer-ui view probe
+    name: evm-signer-ui view probe
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -76,7 +76,7 @@ jobs:
           echo "assertions: $n"; [ "$n" -ge 24 ]
 
   doctests:
-    name: signer-ui doc-tests (${{ matrix.os }})
+    name: evm-signer-ui doc-tests (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -131,7 +131,7 @@ jobs:
       - name: Run doc-tests
         run: |
           nix run github:logos-co/logos-doctest -- run \
-            doctests/signer-ui-e2e.test.yaml \
+            doctests/evm-signer-ui-e2e.test.yaml \
             --verbose \
             --continue-on-fail \
             --release-for logos-evm-signer-ui=${{ steps.commit.outputs.sha }} \

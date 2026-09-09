@@ -28,7 +28,7 @@
 // What remains deliberately absent: any field the backend authors from a source
 // other than `renderLines`. This plugin still has no client for any wallet,
 // chain, RPC or token-list module.
-class SignerUi
+class EvmSignerUi
 {
     PROP(QString statusText="Starting" READONLY)
     PROP(QString lastError="" READONLY)

@@ -1,21 +1,21 @@
 name: "Approving a signature: request, render, password, signature"
-output: signer-ui-e2e.md
+output: evm-signer-ui-e2e.md
 release: ""
 
 intro: |
-  This doc-test proves the whole point of `signer_ui`: **a module can ask for a
+  This doc-test proves the whole point of `evm_signer_ui`: **a module can ask for a
   signature, but only a human can produce one.**
 
   It runs the real chain headlessly — a requesting module, the keystore, and the
   signer UI — and drives the UI the way a person would, through
   [`logos-qt-mcp`](https://github.com/logos-co/logos-qt-mcp):
 
-  1. `signer_probe` names who holds the keystore's two roles — `signer_ui`
+  1. `signer_probe` names who holds the keystore's two roles — `evm_signer_ui`
      approves, `signer_probe` mutates accounts — in one `configure` call.
   2. `signer_probe` (a Tier B requester) imports a known key and asks for a
      signature on a message.
   3. The keystore parks the request and announces it.
-  4. `signer_ui` — the only module allowed to approve — acknowledges receipt and
+  4. `evm_signer_ui` — the only module allowed to approve — acknowledges receipt and
      renders **the keystore's own words**, verbatim.
   5. The password is typed into the UI and Approve is clicked.
   6. The requester collects a real secp256k1 signature with its receipt.
@@ -149,7 +149,7 @@ sections:
         expect_contains:
           - "keystore_module"
           - "signer_probe"
-          - "signer_ui"
+          - "evm_signer_ui"
 
   - title: "Run it and approve a signature"
     step: true
@@ -175,21 +175,21 @@ sections:
           So `signer_probe` makes one call before anything else, naming both:
 
           ```json
-          keystore_module.configure({"approvers": "signer_ui", "custodians": "signer_probe"})
+          keystore_module.configure({"approvers": "evm_signer_ui", "custodians": "signer_probe"})
           ```
 
           **Both roles in the one call, deliberately.** `configure` is *total*,
           not a patch: the document is the whole answer to who holds these roles,
           so one it does not name is held by **nobody** — an empty name admits no
           caller. Naming only the custodian would strip the approver, and Tier A
-          would then refuse `signer_ui` itself, which is the half of this
+          would then refuse `evm_signer_ui` itself, which is the half of this
           doc-test that matters.
 
-          **Who gets which, and why.** The approver stays `signer_ui`: it is the
+          **Who gets which, and why.** The approver stays `evm_signer_ui`: it is the
           subject here, the surface a human reads and clicks, and moving that
           role anywhere else would leave nothing to test. The custodian is
           `signer_probe`, because in this staged tree there is no other
-          candidate — production's custodian is `keystore_ui`, which is not
+          candidate — production's custodian is `evm_keystore_ui`, which is not
           installed here, and a role naming an absent module admits nobody.
 
           Two honest caveats. `configure` is **ungated for now**, so this is the
@@ -222,7 +222,7 @@ sections:
         #                        timeout. An absent warning then reads as a
         #                        passed check.
         ui_test:
-          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 ./result-app/bin/logos-standalone-app -p ./tree/plugins/signer_ui -m ./tree/modules --load signer_probe -u ./userdir"
+          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 ./result-app/bin/logos-standalone-app -p ./tree/plugins/evm_signer_ui -m ./tree/modules --load signer_probe -u ./userdir"
           qt_mcp: "result-mcp"
           launch_timeout: 600
           tests:
@@ -273,7 +273,7 @@ sections:
                 - "Interpreted: WETH — VERIFIED (this address is WETH on chain 1, and it declares this function)"
                 - "  Function: transfer(address,uint256)"
               timeout: 10000
-              screenshot: "signer-ui-approval.png"
+              screenshot: "evm-signer-ui-approval.png"
 
             - name: "Type the vault password"
               action: set_text
@@ -325,7 +325,7 @@ sections:
               # stack that records the outcome, so this is immediate rather than
               # waiting on the next poll. It no longer needs a poll-sized budget.
               timeout: 5000
-              screenshot: "signer-ui-approved.png"
+              screenshot: "evm-signer-ui-approved.png"
 
 
 
@@ -365,7 +365,7 @@ sections:
           # string only ever passed on Linux. What matters is that it is the
           # portable build: a "-dev" variant installs without complaint and then
           # never loads, with only a "not supported on this platform" warning.
-          variant="$(cat bctree/plugins/signer_ui/variant)"
+          variant="$(cat bctree/plugins/evm_signer_ui/variant)"
           case "$variant" in
             *-dev) echo "WRONG VARIANT (dev build): $variant"; exit 1 ;;
             *)     echo "PORTABLE VARIANT OK: $variant" ;;
@@ -396,7 +396,7 @@ sections:
           # surfaces as `Expected texts not found: ["Workspace"]` and reads
           # exactly like a wrong label, which is how it was misdiagnosed twice.
           # Measured: Basecamp itself paints "Workspace", "Welcome Back," and the
-          # signer_ui tile at t=4.0-4.2s, so a missing shell is never slowness.
+          # evm_signer_ui tile at t=4.0-4.2s, so a missing shell is never slowness.
           setup:
             - |
               python3 - <<'PY'
@@ -420,7 +420,7 @@ sections:
             - name: "The shell is up and the app list has been scanned"
               # "Welcome Back," replaces "Welcome to Basecamp!" only once the
               # launcher model is POPULATED -- i.e. the plugin directory has been
-              # scanned and the signer_ui tile exists. Waiting on "Workspace"
+              # scanned and the evm_signer_ui tile exists. Waiting on "Workspace"
               # alone proves the shell painted, not that there is anything to
               # click, so the click below would race the scan.
               action: wait_for
@@ -443,10 +443,10 @@ sections:
               # hover tooltip), but the driver matches the QObject `text`
               # property rather than pixels, and that property is
               # `displayName || name` -- and metadata.json sets no display_name.
-              # So the tile's text is exactly "signer_ui". No "Workspace" click
+              # So the tile's text is exactly "evm_signer_ui". No "Workspace" click
               # is needed first: section 0 is the startup default.
               action: click
-              target: "signer_ui"
+              target: "evm_signer_ui"
 
             - name: "The signer surface is up inside Basecamp"
               # Plugin-specific text, so it cannot match the shell. Reaching it
@@ -456,6 +456,6 @@ sections:
               action: wait_for
               texts: ["No signing requests are waiting."]
               timeout: 45000
-              screenshot: "signer-ui-basecamp.png"
+              screenshot: "evm-signer-ui-basecamp.png"
 
 

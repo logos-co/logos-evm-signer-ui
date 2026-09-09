@@ -1,4 +1,4 @@
-#include "signer_ui_backend.h"
+#include "evm_signer_ui_backend.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -30,7 +30,7 @@ QJsonObject parseObject(const QString &raw)
 
 } // namespace
 
-SignerUiBackend::~SignerUiBackend()
+EvmSignerUiBackend::~EvmSignerUiBackend()
 {
     logos_tx_decoder_free(m_decoder);
 }
@@ -41,7 +41,7 @@ SignerUiBackend::~SignerUiBackend()
 // structured `to` or `data` — and that turns out to be the right input rather
 // than a limitation: an interpretation derived from the displayed text cannot
 // describe different bytes than the human is reading.
-QStringList SignerUiBackend::interpret(const QStringList &lines) const
+QStringList EvmSignerUiBackend::interpret(const QStringList &lines) const
 {
     if (!m_decoder || lines.isEmpty()) {
         return {};
@@ -82,7 +82,7 @@ QStringList SignerUiBackend::interpret(const QStringList &lines) const
     return out;
 }
 
-void SignerUiBackend::onContextReady()
+void EvmSignerUiBackend::onContextReady()
 {
     // Null on failure, and that is survivable: every other property is
     // unaffected and the sheet still renders the keystore's lines.
@@ -129,12 +129,12 @@ void SignerUiBackend::onContextReady()
     setStatusText(QStringLiteral("Ready"));
 }
 
-void SignerUiBackend::refreshSoon()
+void EvmSignerUiBackend::refreshSoon()
 {
     QTimer::singleShot(0, this, [this] { refresh(); });
 }
 
-void SignerUiBackend::refresh()
+void EvmSignerUiBackend::refresh()
 {
     // pending() is synchronous and can block for as long as its timeout. The
     // poll timer must not stack a second one behind a call that is still in
@@ -203,7 +203,7 @@ void SignerUiBackend::refresh()
     }
 }
 
-bool SignerUiBackend::acknowledge(QString handle)
+bool EvmSignerUiBackend::acknowledge(QString handle)
 {
     const QJsonObject r = parseObject(modules().keystore_module.acknowledge(handle));
     if (!r.value(QStringLiteral("ok")).toBool()) {
@@ -240,7 +240,7 @@ bool SignerUiBackend::acknowledge(QString handle)
     return true;
 }
 
-bool SignerUiBackend::approve(QString handle, QString bundleId, QString password)
+bool EvmSignerUiBackend::approve(QString handle, QString bundleId, QString password)
 {
     // Refuse anything that is not what is currently on screen, and refuse it
     // before the password is used for anything.
@@ -298,7 +298,7 @@ bool SignerUiBackend::approve(QString handle, QString bundleId, QString password
     return true;
 }
 
-bool SignerUiBackend::reject(QString handle)
+bool EvmSignerUiBackend::reject(QString handle)
 {
     const bool ok = modules().keystore_module.reject(handle);
     if (ok) {
@@ -308,12 +308,12 @@ bool SignerUiBackend::reject(QString handle)
     return ok;
 }
 
-void SignerUiBackend::dismiss()
+void EvmSignerUiBackend::dismiss()
 {
     clearRendered();
 }
 
-void SignerUiBackend::clearRendered()
+void EvmSignerUiBackend::clearRendered()
 {
     m_dwell.stop();
     setDwellElapsed(false);
@@ -327,7 +327,7 @@ void SignerUiBackend::clearRendered()
     setInterpretationLines(QStringList());
 }
 
-void SignerUiBackend::startDwell()
+void EvmSignerUiBackend::startDwell()
 {
     setDwellElapsed(false);
     m_dwell.start(kDwellMs);

@@ -42,6 +42,14 @@ class SignerUi
     PROP(QString renderedRequester="" READONLY)
     PROP(QStringList renderLines READONLY)
 
+    // What the REQUESTER claims this is for, verbatim. The keystore returns it
+    // as a second list precisely so an approver can separate it from the lines
+    // above WITHOUT parsing text: everything in `renderLines` the keystore
+    // derived by parsing the intent itself, everything here is attacker-supplied
+    // string. Show both, never merge them, and never let this one be styled to
+    // look like the derived half.
+    PROP(QStringList claimLines READONLY)
+
     // Locally decoded reading of the calldata in `renderLines`. Empty whenever
     // nothing decoded, which is not an error. Never a substitute for the above.
     PROP(QStringList interpretationLines READONLY)

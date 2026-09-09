@@ -30,11 +30,11 @@ const VAULT_PASSWORD: &str = "doctest-pw";
 const MESSAGE: &str = "I authorise the doc-test transfer";
 
 /// Who holds the keystore's two roles here. Each is a LIST; a bare string is the
-/// common single-holder spelling `configure` normalises up. The approver stays `signer_ui` — it is
-/// the surface under test. The custodian is this fixture: `keystore_ui` is not in
+/// common single-holder spelling `configure` normalises up. The approver stays `evm_signer_ui` — it is
+/// the surface under test. The custodian is this fixture: `evm_keystore_ui` is not in
 /// this tree, and a role naming a module that is not there admits nobody, so the
 /// key import below would be refused.
-const ROLES: &str = r#"{"approvers":"signer_ui","custodians":"signer_probe"}"#;
+const ROLES: &str = r#"{"approvers":"evm_signer_ui","custodians":"signer_probe"}"#;
 
 /// Printed on stdout so the doc-test can assert on the app log without needing
 /// a CLI — Basecamp has none.
@@ -83,7 +83,7 @@ fn drive(state: Shared) {
 
     // 1. Tier C — name BOTH roles, because configure() is total: a role the
     // document does not name is held by nobody, so naming only the custodian
-    // would empty the approver and Tier A would then refuse signer_ui itself.
+    // would empty the approver and Tier A would then refuse evm_signer_ui itself.
     if let Err(e) = ok_value(modules().keystore_module.configure(ROLES)) {
         println!("{MARK}_ERROR: configure failed: {e}");
         set!(json!({ "ok": false, "state": "configure_failed", "error": e }));

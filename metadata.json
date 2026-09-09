@@ -1,11 +1,11 @@
 {
-  "name": "signer_ui",
+  "name": "evm_signer_ui",
   "version": "1.0.0",
   "type": "ui_qml",
   "interface": "universal",
   "category": "wallet",
   "description": "The signing approval surface: shows what a module asked to sign, in the keystore's own words, and takes the vault password.",
-  "main": "signer_ui_plugin",
+  "main": "evm_signer_ui_plugin",
   "icon": "src/icons/signer.png",
   "view": "qml/SignerView.qml",
   "dependencies": [
@@ -25,7 +25,7 @@
     }
   ],
   "codegen": {
-    "rep": "src/signer_ui.rep"
+    "rep": "src/evm_signer_ui.rep"
   },
   "nix": {
     "packages": {

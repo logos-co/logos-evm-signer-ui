@@ -1,4 +1,4 @@
-# signer_ui — specification
+# evm_signer_ui — specification
 
 ## What this plugin is
 
@@ -14,15 +14,15 @@ custodian name beside it. `keystore_module.configure({"approver": …,
 "custodian": …})` sets them, and it is **total** — a role the document does not
 name is held by nobody, so anything configuring the custodian must name the
 approver in the same call or strip it. Until something calls it the built-in
-defaults stand, and this plugin is one of them: `signer_ui` approves,
-`keystore_ui` mutates accounts.
+defaults stand, and this plugin is one of them: `evm_signer_ui` approves,
+`evm_keystore_ui` mutates accounts.
 
 ## What the approver role denotes
 
-> `signer_ui` as the configured approver names a **plugin package**, not a
+> `evm_signer_ui` as the configured approver names a **plugin package**, not a
 > person and not a process. A `ui_qml` plugin registers one identity and one
 > token, shared by its QML view and its `ui-host` backend, and a callee resolves
-> both to `module:signer_ui`. The keystore cannot distinguish the view from the
+> both to `module:evm_signer_ui`. The keystore cannot distinguish the view from the
 > backend and does not pretend to. What the role asserts is that **the operator
 > designated this package as the code permitted to approve**. It does not assert
 > that a human saw anything, and no token check can make it.

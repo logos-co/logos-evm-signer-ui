@@ -206,6 +206,24 @@ Item {
                 }
             }
 
+            // What the requester CLAIMS this is for. Kept in its own block, above
+            // and visually apart from the derived lines: the keystore hands these
+            // over as a separate list because they are attacker-supplied text, and
+            // merging them into the block below would let a requester write a
+            // string that reads like something the signer worked out itself.
+            Repeater {
+                model: root.ready ? backend.claimLines : []
+                delegate: LogosText {
+                    Layout.fillWidth: true
+                    text: modelData
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    font.family: "monospace"
+                    font.italic: true
+                    opacity: 0.85
+                }
+            }
+
             // The keystore's lines, one per row, unmodified.
             ScrollView {
                 Layout.fillWidth: true

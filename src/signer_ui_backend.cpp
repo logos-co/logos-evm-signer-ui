@@ -219,8 +219,18 @@ bool SignerUiBackend::acknowledge(QString handle)
     for (const QJsonValue &v : r.value(QStringLiteral("render_lines")).toArray()) {
         lines << v.toString();
     }
+    // The requester's own claim about the bundle, which the keystore keeps in a
+    // SEPARATE list. Dropping it hid the one line saying what the signature is
+    // claimed to be for, leaving the human to approve a commitment and a digest.
+    // It is never merged into `lines`: the split is the only thing that lets the
+    // view mark requester-supplied text as such without parsing it.
+    QStringList claims;
+    for (const QJsonValue &v : r.value(QStringLiteral("claim_lines")).toArray()) {
+        claims << v.toString();
+    }
 
     setLastError(QString());
+    setClaimLines(claims);
     setRenderedRequester(r.value(QStringLiteral("requester")).toString());
     setRenderedBundleId(r.value(QStringLiteral("bundle_id")).toString());
     setRenderLines(lines);
@@ -311,6 +321,7 @@ void SignerUiBackend::clearRendered()
     setRenderedBundleId(QString());
     setRenderedRequester(QString());
     setRenderLines(QStringList());
+    setClaimLines(QStringList());
     // Must clear with the rest: a reading left behind would describe a request
     // that is no longer on screen.
     setInterpretationLines(QStringList());

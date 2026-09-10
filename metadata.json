@@ -1,5 +1,6 @@
 {
   "name": "evm_signer_ui",
+  "display_name": "Signer",
   "version": "1.0.0",
   "type": "ui_qml",
   "interface": "universal",

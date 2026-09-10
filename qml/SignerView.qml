@@ -276,6 +276,10 @@ Item {
                                  "of what is signed, and every line says how sure it is."
 
                         Repeater {
+                            // Named so the doc-test can assert the line COUNT: what this
+                            // layer must not do over a verified address is add anything,
+                            // and only a count can catch an absence.
+                            objectName: "interpretationLines"
                             model: root.ready ? backend.interpretationLines : []
                             delegate: Line {
                                 objectName: "interpretationLine"

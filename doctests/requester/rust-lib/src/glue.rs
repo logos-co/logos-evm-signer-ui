@@ -119,10 +119,11 @@ fn drive(state: Shared) {
         // queue row, so any overlap makes the click ambiguous -- it matched the
         // row instead of the button the first time.
         "purpose": "Doc-test: sign one message end to end",
-        // A message leg AND a transaction leg. The transaction is what gives the
-        // signer UI something to decode: a WETH `transfer`, which its embedded
-        // ABI database can name and therefore mark VERIFIED. The message leg
-        // stays because it is decodable by nobody, and the sheet must show both.
+        // Three legs, one per confidence tier the sheet must show differently:
+        // a message nobody can decode, a WETH `transfer` the ABI database VERIFIES,
+        // and a USDC `transfer` it does not hold -- so USDC is the only leg an
+        // unverified token list may speak about, and WETH is the control that
+        // proves it stays quiet over a verified address.
         "legs": [
             { "kind": "message", "text": MESSAGE },
             { "kind": "tx", "chain_id": 1, "tx": {
@@ -131,6 +132,15 @@ fn drive(state: Shared) {
                 "nonce": "0",
                 "gas_limit": "60000",
                 "data": "0xa9059cbb000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045000000000000000000000000000000000000000000000000000000003b9aca00"
+            }},
+            // 2500000 at USDC's 6 decimals is 2.5 -- a fractional amount, and one
+            // that reads as 0.0000000000025 if a surface assumes 18.
+            { "kind": "tx", "chain_id": 1, "tx": {
+                "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                "value": "0",
+                "nonce": "1",
+                "gas_limit": "60000",
+                "data": "0xa9059cbb000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa9604500000000000000000000000000000000000000000000000000000000002625a0"
             }}
         ]
     })

@@ -3,9 +3,9 @@
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    # The only MODULE dependency, deliberately. This plugin has no client for
-    # any wallet, chain, RPC or token-list module, so it cannot ask anyone what
-    # an intent means — it renders the lines the keystore authored.
+    # The only REQUIRED module dependency, deliberately: this plugin cannot ask
+    # anyone what an intent MEANS — it renders the lines the keystore authored,
+    # and section 3 is decoded from those very lines by a linked-in library.
     keystore_module = {
       url = "github:logos-co/logos-evm-keystore-module";
       # Without the follows it drags its own module-builder, and a skewed generated
@@ -13,11 +13,23 @@
       inputs.logos-module-builder.follows = "logos-module-builder";
     };
 
+    # OPTIONAL, and the one thing this plugin does ask another module. It can name
+    # the address being signed to and give its decimals — a NAME, never a check of
+    # the code, kept out of the tiers below and labelled with the list that
+    # answered. Absent is a normal state: the sheet is then exactly what it was.
+    token_list_module = {
+      url = "github:logos-co/logos-evm-token-list-module";
+      inputs.logos-module-builder.follows = "logos-module-builder";
+    };
+
     # Offline calldata decoding, linked in as a static archive. A library, not a
-    # module: nothing is asked of the network or of another process, so what the
-    # human reads still depends on this plugin alone.
+    # module: nothing is asked of the network, so the TIERS the human reads still
+    # depend on this plugin alone.
     logos-tx-decoder = {
-      url = "github:logos-co/logos-tx-decoder";
+      # PINNED to the branch that adds `to`/`function`/`args` to a leg — this plugin
+      # needs them to ask the token list without re-parsing the keystore's text in
+      # C++. Move to main once logos-tx-decoder#7 lands.
+      url = "github:logos-co/logos-tx-decoder/feat/leg-carries-what-it-decoded";
       # It builds the archive against logos-module-builder.inputs.nixpkgs; without the
       # follows that is a SECOND nixpkgs, and the .a is linked into this plugin.
       inputs.logos-module-builder.follows = "logos-module-builder";

@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QJsonObject>
 #include <QDateTime>
 #include <QTimer>
 
@@ -20,8 +21,13 @@ struct LogosTxDecoder;
 // The keystore's render lines pass through untouched; the backend may not
 // reformat or re-order them. It additionally decodes the calldata found IN those
 // lines, offline, via the linked-in logos-tx-decoder, and publishes the reading
-// separately as `interpretationLines`. It still has no client for any wallet or
-// chain module, so the decode can only ever describe bytes already on screen.
+// separately as `interpretationLines`. It has no client for any wallet or chain
+// module, so the decode can only ever describe bytes already on screen.
+//
+// Under that decode it may add what `token_list_module` — an OPTIONAL dependency
+// — calls the address being signed to, and the amount in that token's units. A
+// NAME, never a check of the code: it cannot move the decoder's tiers, it says
+// which list answered, and absent is a normal state.
 class EvmSignerUiBackend : public EvmSignerUiSimpleSource,
                            public LogosUiPluginContext
 {
@@ -43,6 +49,9 @@ private:
     /// lines are complete on their own, so a decoder problem must not surface
     /// as an approval problem.
     QStringList interpret(const QStringList &lines) const;
+    /// What a token list calls this leg's address, or nothing. Empty whenever the
+    /// module is absent, which is the ordinary case on a signing device.
+    QStringList tokenListLines(const QJsonObject &leg) const;
     void startDwell();
     /// Refresh on a clean event-loop stack. Use this from event callbacks:
     /// calling out synchronously from an IPC callback deadlocks the reply.

@@ -3118,11 +3118,11 @@
         "rust-overlay": "rust-overlay_4"
       },
       "locked": {
-        "lastModified": 1788897233,
-        "narHash": "sha256-E7Pz2qSKddt4N15RezxKkcQTDvvbUTDSc5P0+oSovdA=",
+        "lastModified": 1789056783,
+        "narHash": "sha256-SYwUnEt/ZI4G51Se1vivY708nHrqqWpB1I5f5pJAHa0=",
         "owner": "logos-co",
         "repo": "logos-module-builder",
-        "rev": "9f420c2901e35a16ba8fc77383e796480000a1d2",
+        "rev": "ff2ee218f3f250753d95e02903ee23a7f22760e9",
         "type": "github"
       },
       "original": {
@@ -5885,11 +5885,11 @@
         "nixpkgs-windows": "nixpkgs-windows_3"
       },
       "locked": {
-        "lastModified": 1788889549,
-        "narHash": "sha256-7HylwQZ9ywzlwAqwBboJJkV0r4RhRvnLatQR+Yv8sdE=",
+        "lastModified": 1789054121,
+        "narHash": "sha256-EOG96lY4KnZadh2lczZFMPnfPP9tWXdWt1p1CP8Gvww=",
         "owner": "logos-co",
         "repo": "logos-nix",
-        "rev": "30285b1025f053b0adca39a6a5c94f93df0619e2",
+        "rev": "7c1eb8bc390546f32aaf134866a1c7db8e9311cc",
         "type": "github"
       },
       "original": {
@@ -10658,11 +10658,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1788888630,
-        "narHash": "sha256-ibEdGIrfycCQQFNaBrROaHJ1D30n2x2D2tIJSva1CgM=",
+        "lastModified": 1789046709,
+        "narHash": "sha256-oA39e7o4Fe7HfV0SHx4QzBDQy2+1fwSoFSEnHFYGaBE=",
         "owner": "logos-co",
         "repo": "logos-rust-sdk",
-        "rev": "102f86779b010f5bc2e845cf91bb3583e87dcc0c",
+        "rev": "888302ef0f2664d9b17e31da22bce067e9f96e12",
         "type": "github"
       },
       "original": {
@@ -11094,15 +11094,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1788921199,
-        "narHash": "sha256-0mb1MMUhABvxqry9ulTpmIR6f5AEPiZkvFYMR9Enff4=",
+        "lastModified": 1789057277,
+        "narHash": "sha256-pI0ryNdMU9Y4BXG74wW5bU7js0XtogbTRb+5HGBstTg=",
         "owner": "logos-co",
         "repo": "logos-tx-decoder",
-        "rev": "6abf44ee1e28f0c2d9268ed500c36a69ba71c62d",
+        "rev": "84a571dd280df0bec3d826de59fce5ba1fcfabac",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
+        "ref": "feat/leg-carries-what-it-decoded",
         "repo": "logos-tx-decoder",
         "type": "github"
       }
@@ -17889,7 +17890,8 @@
       "inputs": {
         "keystore_module": "keystore_module",
         "logos-module-builder": "logos-module-builder",
-        "logos-tx-decoder": "logos-tx-decoder"
+        "logos-tx-decoder": "logos-tx-decoder",
+        "token_list_module": "token_list_module"
       }
     },
     "rust-overlay": {
@@ -17989,6 +17991,26 @@
       "original": {
         "owner": "oxalica",
         "repo": "rust-overlay",
+        "type": "github"
+      }
+    },
+    "token_list_module": {
+      "inputs": {
+        "logos-module-builder": [
+          "logos-module-builder"
+        ]
+      },
+      "locked": {
+        "lastModified": 1788923121,
+        "narHash": "sha256-VmrT3AaEzBKJpLcOoCN758RGoIKPK9ocaJ3wj9aWSEw=",
+        "owner": "logos-co",
+        "repo": "logos-evm-token-list-module",
+        "rev": "db6c5aee3bd8fb5f9f0fbd6556c18f42807a477e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "logos-co",
+        "repo": "logos-evm-token-list-module",
         "type": "github"
       }
     }

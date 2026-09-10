@@ -11094,16 +11094,15 @@
         ]
       },
       "locked": {
-        "lastModified": 1789057277,
+        "lastModified": 1789059496,
         "narHash": "sha256-pI0ryNdMU9Y4BXG74wW5bU7js0XtogbTRb+5HGBstTg=",
         "owner": "logos-co",
         "repo": "logos-tx-decoder",
-        "rev": "84a571dd280df0bec3d826de59fce5ba1fcfabac",
+        "rev": "b28ccdbb72b374eaa15be3dea81c04a293e9b53d",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
-        "ref": "feat/leg-carries-what-it-decoded",
         "repo": "logos-tx-decoder",
         "type": "github"
       }

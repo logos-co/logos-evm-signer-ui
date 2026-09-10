@@ -26,10 +26,7 @@
     # module: nothing is asked of the network, so the TIERS the human reads still
     # depend on this plugin alone.
     logos-tx-decoder = {
-      # PINNED to the branch that adds `to`/`function`/`args` to a leg — this plugin
-      # needs them to ask the token list without re-parsing the keystore's text in
-      # C++. Move to main once logos-tx-decoder#7 lands.
-      url = "github:logos-co/logos-tx-decoder/feat/leg-carries-what-it-decoded";
+      url = "github:logos-co/logos-tx-decoder";
       # It builds the archive against logos-module-builder.inputs.nixpkgs; without the
       # follows that is a SECOND nixpkgs, and the .a is linked into this plugin.
       inputs.logos-module-builder.follows = "logos-module-builder";

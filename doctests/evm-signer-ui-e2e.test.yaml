@@ -236,15 +236,15 @@ sections:
         #                        timeout. An absent warning then reads as a
         #                        passed check.
         #
-        # `--load token_list_module` is EXPLICIT because THIS host never reads
-        # optional_dependencies at all: logos-standalone-app loads only the
-        # plugin's `dependencies` array (app/mainwindow.cpp), so the key is
-        # invisible to it. Measured -- without this the layer below finds no token
+        # `--load token_list_module` is EXPLICIT because no host loads a ui_qml
+        # plugin's OWN optional dependencies. Both hosts ask for the widened
+        # policy and both root it in the required list alone:
+        #   standalone-app  mainwindow.cpp:246  for (dep : pluginInfo["dependencies"])
+        #                                  :250    loadModule(dep, REQUIRED_AND_OPTIONAL)
+        #   basecamp        UIPluginManager.cpp:296  coreDependencies = meta["dependencies"]
+        # So each REQUIRED dep brings its own optional deps, and the plugin's never
+        # become a root. Measured -- without this the layer below finds no token
         # list, the call fails, and the section renders the decoder's lines alone.
-        #
-        # Not a statement about hosts in general. Basecamp DOES auto-load optional
-        # deps of the modules it loads (LoadPolicy::RequiredAndOptional), though a
-        # ui_qml plugin's OWN optional deps are dropped before that call.
         ui_test:
           launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 ./result-app/bin/logos-standalone-app -p ./tree/plugins/evm_signer_ui -m ./tree/modules --load signer_probe --load token_list_module -u ./userdir"
           qt_mcp: "result-mcp"

@@ -284,7 +284,7 @@ sections:
               # database, not merely a 4-byte selector that matched.
               action: wait_for
               texts:
-                - "Interpretation — decoded on this device, not part of what is signed"
+                - "Decoded on this device from the lines above. Not part of what is signed, and every line says how sure it is."
                 - "Item [2]:"
                 - "Interpreted: WETH — VERIFIED (this address is WETH on chain 1, and it declares this function)"
                 - "  Function: transfer(address,uint256)"

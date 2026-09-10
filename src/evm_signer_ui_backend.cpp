@@ -78,6 +78,126 @@ QStringList EvmSignerUiBackend::interpret(const QStringList &lines) const
         for (const QJsonValue &line : leg.value(QStringLiteral("lines")).toArray()) {
             out << line.toString();
         }
+        // AFTER the decoder's own reading, never mixed into it: the decoder says what
+        // its database can back, and this says what a token list on this device claims.
+        out << tokenListLines(leg);
+    }
+    return out;
+}
+
+namespace {
+
+// Which argument of a call is an amount in the token's own units, by signature.
+//
+// This surface's OWN table, deliberately not borrowed from the decoder: it belongs to
+// the unverified layer, and a position table that travelled would invite the decoder's
+// stricter promise to travel with it. A uint256 is as likely to be a deadline or a
+// token id, so only the ERC-20 trio whose unit the standard itself fixes is here.
+int amountArg(const QString &signature)
+{
+    if (signature == QStringLiteral("transfer(address,uint256)")
+        || signature == QStringLiteral("approve(address,uint256)")) {
+        return 1;
+    }
+    if (signature == QStringLiteral("transferFrom(address,address,uint256)")) {
+        return 2;
+    }
+    return -1;
+}
+
+// Exact, never rounded — the same rule the keystore's own figures follow. A value this
+// cannot read scales to nothing rather than to a guess: reading 6-decimal USDC as 18 is
+// wrong by a factor of a trillion, in the direction that looks harmless.
+QString scaleUnits(const QString &raw, int decimals)
+{
+    if (raw.isEmpty() || decimals < 0 || decimals > 36) {
+        return {};
+    }
+    for (const QChar c : raw) {
+        if (!c.isDigit()) {
+            return {};
+        }
+    }
+    if (decimals == 0) {
+        return raw;
+    }
+    const QString padded = raw.rightJustified(decimals + 1, QLatin1Char('0'));
+    QString whole = padded.left(padded.size() - decimals);
+    QString frac = padded.right(decimals);
+    while (frac.endsWith(QLatin1Char('0'))) {
+        frac.chop(1);
+    }
+    return frac.isEmpty() ? whole : whole + QLatin1Char('.') + frac;
+}
+
+} // namespace
+
+QStringList EvmSignerUiBackend::tokenListLines(const QJsonObject &leg) const
+{
+    const QString to = leg.value(QStringLiteral("to")).toString();
+    if (to.isEmpty()) {
+        return {};
+    }
+    // Nothing to add over a VERIFIED address. The ABI database has already named it with
+    // more behind the name than a list has, and a second, weaker claim beside a stronger
+    // one is a question the reader has to settle rather than an answer. A token that
+    // should be named with certainty belongs in that database, not here.
+    if (leg.value(QStringLiteral("confidence")).toString() == QStringLiteral("verified")) {
+        return {};
+    }
+
+    // Absence is reported, not asked about: the wrapper has no `available()`, and a
+    // missing optional dependency surfaces here as a call error. Bounded at 2s because
+    // this runs while a human waits at the sheet — the default is 20s, and a token list
+    // that cannot answer must cost the naming rather than the approval.
+    const QJsonArray want{ to };
+    logos::CallError err;
+    const QString raw = modules().token_list_module.get_tokens_by_address(
+        leg.value(QStringLiteral("chainId")).toInt(),
+        QString::fromUtf8(QJsonDocument(want).toJson(QJsonDocument::Compact)),
+        &err,
+        Timeout(2000));
+    if (!err.ok()) {
+        return {};
+    }
+    const QJsonObject reply = parseObject(raw);
+    if (!reply.value(QStringLiteral("ok")).toBool()) {
+        return {};
+    }
+    const QJsonArray tokens = reply.value(QStringLiteral("tokens")).toArray();
+    if (tokens.isEmpty()) {
+        return {};
+    }
+    const QJsonObject t = tokens.first().toObject();
+    const QString symbol = t.value(QStringLiteral("symbol")).toString();
+    if (symbol.isEmpty()) {
+        return {};
+    }
+    const QString name = t.value(QStringLiteral("name")).toString();
+    const QString source = t.value(QStringLiteral("source")).toString(QStringLiteral("unknown"));
+    const QString named = (name.isEmpty() || name == symbol)
+                              ? symbol
+                              : QStringLiteral("%1 (%2)").arg(symbol, name);
+
+    // Worded exactly as evm_signer_cli words it: the same request read on the two
+    // surfaces must say the same thing.
+    QStringList out{ QStringLiteral(
+        "Token list (%1) says this address is %2 — a NAME, not a check of the code.")
+                         .arg(source, named) };
+
+    const int idx = amountArg(
+        leg.value(QStringLiteral("function")).toObject().value(QStringLiteral("signature")).toString());
+    const QJsonArray args = leg.value(QStringLiteral("args")).toArray();
+    if (idx >= 0 && idx < args.size()) {
+        const QString scaled = scaleUnits(
+            args.at(idx).toObject().value(QStringLiteral("value")).toString(),
+            t.value(QStringLiteral("decimals")).toInt(-1));
+        if (!scaled.isEmpty()) {
+            // Hedged: the argument's POSITION comes from the signature the decoder
+            // matched, which may itself be a selector guess.
+            out << QStringLiteral("  If that reading is right, the amount is %1 %2.")
+                       .arg(scaled, symbol);
+        }
     }
     return out;
 }

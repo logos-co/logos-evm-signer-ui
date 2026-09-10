@@ -110,6 +110,18 @@ sections:
       - title: "The probe really produced a module"
         check_file: "result-probe/modules"
 
+      - title: "Build the token list"
+        text: |
+          An OPTIONAL dependency: the signer loads and signs without it, and the
+          section below proves that by naming only what it can. It is staged here
+          so the unverified layer has something to say about an address the ABI
+          database does not hold.
+        run: "nix build 'github:logos-co/logos-evm-token-list-module{release}#install' --no-write-lock-file -o result-tokenlist"
+        code_block: "nix build 'github:logos-co/logos-evm-token-list-module#install' --no-write-lock-file -o result-tokenlist"
+
+      - title: "The token list really produced modules"
+        check_file: "result-tokenlist/modules"
+
       - title: "Build capability_module"
         text: |
           Not bundled with the standalone host. Without it every token handshake
@@ -137,6 +149,7 @@ sections:
           cp -r result-keystore/modules/*   tree/modules/
           cp -r result-probe/modules/*      tree/modules/
           cp -r result-capability/modules/* tree/modules/
+          cp -r result-tokenlist/modules/*  tree/modules/
           cp -r result-signer/plugins/*     tree/plugins/
           chmod -R u+w tree
           ls tree/modules tree/plugins
@@ -145,6 +158,7 @@ sections:
           cp -r result-keystore/modules/*   tree/modules/
           cp -r result-probe/modules/*      tree/modules/
           cp -r result-capability/modules/* tree/modules/
+          cp -r result-tokenlist/modules/*  tree/modules/
           cp -r result-signer/plugins/*     tree/plugins/
         expect_contains:
           - "keystore_module"
@@ -221,8 +235,18 @@ sections:
         #                        NOTHING — not the QML error, not the ui-host
         #                        timeout. An absent warning then reads as a
         #                        passed check.
+        #
+        # `--load token_list_module` is EXPLICIT because no host loads a ui_qml
+        # plugin's OWN optional dependencies. Both hosts ask for the widened
+        # policy and both root it in the required list alone:
+        #   standalone-app  mainwindow.cpp:246  for (dep : pluginInfo["dependencies"])
+        #                                  :250    loadModule(dep, REQUIRED_AND_OPTIONAL)
+        #   basecamp        UIPluginManager.cpp:296  coreDependencies = meta["dependencies"]
+        # So each REQUIRED dep brings its own optional deps, and the plugin's never
+        # become a root. Measured -- without this the layer below finds no token
+        # list, the call fails, and the section renders the decoder's lines alone.
         ui_test:
-          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 ./result-app/bin/logos-standalone-app -p ./tree/plugins/evm_signer_ui -m ./tree/modules --load signer_probe -u ./userdir"
+          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 ./result-app/bin/logos-standalone-app -p ./tree/plugins/evm_signer_ui -m ./tree/modules --load signer_probe --load token_list_module -u ./userdir"
           qt_mcp: "result-mcp"
           launch_timeout: 600
           tests:
@@ -259,7 +283,7 @@ sections:
               texts:
                 - "2.  What you are signing"
                 - "3.  What this signer makes of section 2"
-              timeout: 10000
+              timeout: 6000
 
             - name: "The human is shown the keystore's own words, not the requester's"
               action: wait_for
@@ -272,9 +296,9 @@ sections:
               # text are stable and say as much.
                 - "Account: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
                 - "Purpose (claimed by the requester): Doc-test: sign one message end to end"
-                - "2 item(s) to sign:"
+                - "3 item(s) to sign:"
                 - "      Text: I authorise the doc-test transfer"
-              timeout: 10000
+              timeout: 6000
 
             - name: "The calldata is decoded on this device, and says so"
               # The keystore never authored these lines: the backend decoded the
@@ -288,8 +312,42 @@ sections:
                 - "Item [2]:"
                 - "Interpreted: WETH — VERIFIED (this address is WETH on chain 1, and it declares this function)"
                 - "  Function: transfer(address,uint256)"
-              timeout: 10000
+              timeout: 6000
               screenshot: "evm-signer-ui-approval.png"
+
+            - name: "A token list may NAME an address the database cannot verify"
+              # Item [3] is USDC, which the decoder's ABI database does not hold, so
+              # its own reading stops at the selector. The token list is allowed to
+              # speak only here, and only as a name: the wording is the same sentence
+              # evm_signer_cli prints, because one request read on two surfaces must
+              # not say two different things.
+              #
+              # The amount matters as much as the name. 2500000 is 2.5 USDC at the
+              # list's 6 decimals and 0.0000000000025 at the 18 a surface might assume.
+              action: wait_for
+              texts:
+                - "Item [3]:"
+                - "Token list (embedded) says this address is USDC (USDCoin) — a NAME, not a check of the code."
+                - "  If that reading is right, the amount is 2.5 USDC."
+              timeout: 6000
+
+            - name: "...and stays silent over the address it CAN verify"
+              # The absence assertion, and the reason the Repeater has a name.
+              # WETH is in the very same token list -- with a name and 18 decimals --
+              # so nothing but the confidence check keeps it out of item [2]. Deleting
+              # that check adds two lines under a VERIFIED heading and moves this count,
+              # which is what makes this an assertion rather than a restatement.
+              #
+              # Counted from a live run, not predicted.
+              action: expect_property
+              find_by: "objectName"
+              find_value: "interpretationLines"
+              property: "count"
+              # 14 = 6 decoder lines for item [2] + 6 for item [3] + the 2 the token
+              # list adds to [3] alone. Deleting the confidence check above makes it
+              # 16, with WETH's own name and 18-decimal amount printed under the word
+              # VERIFIED -- measured, by building that mutant and running it.
+              value: 14
 
             - name: "Type the vault password"
               action: set_text
@@ -329,9 +387,9 @@ sections:
               # time -- which is why this is the strongest thing this surface can
               # honestly assert.
               action: wait_for
-              # TWO items now: the message and the WETH transfer. The backend
-              # pluralises on signed_count, so this is "items", not "item".
-              texts: ["Approved — 2 items signed"]
+              # THREE items: the message, the WETH transfer and the USDC transfer.
+              # The backend pluralises on signed_count, so this is "items", not "item".
+              texts: ["Approved — 3 items signed"]
               timeout: 20000
 
             - name: "The queue is empty again"

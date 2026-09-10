@@ -12,6 +12,9 @@
   "dependencies": [
     "keystore_module"
   ],
+  "optional_dependencies": [
+    "token_list_module"
+  ],
   "provides": [
     {
       "intent": "evm.signing.approve",

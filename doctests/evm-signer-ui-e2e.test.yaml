@@ -236,17 +236,18 @@ sections:
         #                        timeout. An absent warning then reads as a
         #                        passed check.
         #
-        # `--load token_list_module` is EXPLICIT because no host loads a ui_qml
-        # plugin's OWN optional dependencies. Both hosts ask for the widened
-        # policy and both root it in the required list alone:
-        #   standalone-app  mainwindow.cpp:246  for (dep : pluginInfo["dependencies"])
-        #                                  :250    loadModule(dep, REQUIRED_AND_OPTIONAL)
-        #   basecamp        UIPluginManager.cpp:296  coreDependencies = meta["dependencies"]
-        # So each REQUIRED dep brings its own optional deps, and the plugin's never
-        # become a root. Measured -- without this the layer below finds no token
-        # list, the call fails, and the section renders the decoder's lines alone.
+        # token_list_module is NOT named here. It is staged in the tree and the
+        # plugin declares it optional, and the host is expected to work that out
+        # -- which is the whole path a user takes, since nobody names an optional
+        # module by hand. Naming it would test a configuration that never ships
+        # and would hide a regression in the host's own resolution.
+        #
+        # It only became true recently: both hosts used to root the widened walk
+        # in the REQUIRED list alone, so a plugin's own optional edge was never a
+        # root (standalone-app#51, basecamp#409, and the projection it needs in
+        # logos-package-manager-module#68).
         ui_test:
-          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 ./result-app/bin/logos-standalone-app -p ./tree/plugins/evm_signer_ui -m ./tree/modules --load signer_probe --load token_list_module -u ./userdir"
+          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 ./result-app/bin/logos-standalone-app -p ./tree/plugins/evm_signer_ui -m ./tree/modules --load signer_probe -u ./userdir"
           qt_mcp: "result-mcp"
           launch_timeout: 600
           tests:

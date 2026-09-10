@@ -447,6 +447,16 @@ sections:
               # has never once helped.
               timeout: 30000
 
+            - name: "The tile carries the display_name, not the package name"
+              # The point of `display_name`, asserted where a user would read it.
+              # SidebarPanel.qml renders `displayName || name`, so without the
+              # metadata key this reads "evm_signer_ui" and this fails -- which is
+              # what makes it a test of the label rather than of the sidebar.
+              action: expect_property
+              find_value: "sidebar.app.evm_signer_ui"
+              property: "text"
+              value: "Signer"
+
             - name: "Open the Signer from the sidebar"
               # Nothing opens an app on its own: Basecamp loads a ui_qml plugin
               # only when its tile is clicked, and its dependencies with it. The
@@ -455,14 +465,14 @@ sections:
               # literal in the shell, so it was a false positive on a view that
               # was not there.
               #
-              # The tile renders ICON-ONLY (a LogosTile, with the name only in a
-              # hover tooltip), but the driver matches the QObject `text`
-              # property rather than pixels, and that property is
-              # `displayName || name` -- and metadata.json sets no display_name.
-              # So the tile's text is exactly "evm_signer_ui". No "Workspace" click
-              # is needed first: section 0 is the startup default.
-              action: click
-              target: "evm_signer_ui"
+              # Click the objectName, not the label: tiles render ICON-ONLY (the
+              # name is a hover tooltip), and SidebarPanel.qml carries
+              # `sidebar.app.<name>` expressly as the automation handle. Matching
+              # the visible text instead would re-break this section every time
+              # the label is edited -- as adding `display_name` just did. No
+              # "Workspace" click is needed first: section 0 is the startup default.
+              action: click_object
+              find_value: "sidebar.app.evm_signer_ui"
 
             - name: "The signer surface is up inside Basecamp"
               # Plugin-specific text, so it cannot match the shell. Reaching it

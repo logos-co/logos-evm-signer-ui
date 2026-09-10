@@ -236,14 +236,30 @@ sections:
               # decided' — the UI claims receipt itself, because the keystore gives
               # an approver only 3s and gives the human no deadline at all.
               action: wait_for
-              texts: ["Requested by: signer_probe"]
+              # The heading carries the section number, and `findByProperty` matches the
+              # `text` property EXACTLY — so this is the whole rendered string, as for
+              # sections 2 and 3 below. Asserting the bare name silently waits out the
+              # timeout and reports it as if the request had never been claimed.
+              texts: ["1.  Requested by: signer_probe"]
               # 35s, and it is load-bearing: cutting this to 20s to buy headroom
               # under the driver cap failed here with
-              # `Expected texts not found: ["Requested by: signer_probe"]`.
+              # `Expected texts not found: ["1.  Requested by: signer_probe"]`.
               # Cold start plus the first cross-module call is genuinely slow on
               # a loaded box. The headroom came out of the two waits below
               # instead, which are now bounded by real mechanisms.
               timeout: 35000
+
+            - name: "The screen is in three sections, and says which is whose"
+              # The keystore returns its lines in two lists and this view keeps them
+              # apart. probe_sections.qml asserts the separation against a fabricated
+              # backend; this asserts the headings a human actually reads, with a real
+              # keystore behind them. Section 1's heading carries the requester's name
+              # and so is asserted by the requester line below instead.
+              action: wait_for
+              texts:
+                - "2.  What you are signing"
+                - "3.  What this signer makes of section 2"
+              timeout: 10000
 
             - name: "The human is shown the keystore's own words, not the requester's"
               action: wait_for
@@ -268,7 +284,7 @@ sections:
               # database, not merely a 4-byte selector that matched.
               action: wait_for
               texts:
-                - "Interpretation — decoded on this device, not part of what is signed"
+                - "Decoded on this device from the lines above. Not part of what is signed, and every line says how sure it is."
                 - "Item [2]:"
                 - "Interpreted: WETH — VERIFIED (this address is WETH on chain 1, and it declares this function)"
                 - "  Function: transfer(address,uint256)"

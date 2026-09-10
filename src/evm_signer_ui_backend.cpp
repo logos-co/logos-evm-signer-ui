@@ -233,6 +233,7 @@ bool EvmSignerUiBackend::acknowledge(QString handle)
     setClaimLines(claims);
     setRenderedRequester(r.value(QStringLiteral("requester")).toString());
     setRenderedBundleId(r.value(QStringLiteral("bundle_id")).toString());
+    setClaimLines(claims);
     setRenderLines(lines);
     setInterpretationLines(interpret(lines));
     setRenderedHandle(r.value(QStringLiteral("handle")).toString());
@@ -320,6 +321,7 @@ void EvmSignerUiBackend::clearRendered()
     setRenderedHandle(QString());
     setRenderedBundleId(QString());
     setRenderedRequester(QString());
+    setClaimLines(QStringList());
     setRenderLines(QStringList());
     setClaimLines(QStringList());
     // Must clear with the rest: a reading left behind would describe a request

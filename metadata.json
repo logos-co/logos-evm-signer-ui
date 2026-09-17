@@ -1,7 +1,7 @@
 {
   "name": "evm_signer_ui",
   "display_name": "Signer",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "type": "ui_qml",
   "interface": "universal",
   "category": "wallet",
@@ -10,10 +10,16 @@
   "icon": "src/icons/signer.png",
   "view": "qml/SignerView.qml",
   "dependencies": [
-    "keystore_module"
+    {
+      "name": "keystore_module",
+      "version": "~0.1.0"
+    }
   ],
   "optional_dependencies": [
-    "token_list_module"
+    {
+      "name": "token_list_module",
+      "version": "~0.1.0"
+    }
   ],
   "provides": [
     {

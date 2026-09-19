@@ -36,8 +36,8 @@ approves, `evm_keystore_ui` mutates accounts.
 
 ## What the split buys, and what it does not
 
-**Buys.** No wallet — not its QML, not its backend, not `wallet_backend_module`,
-not `eth_rpc_module`, not `railgun_module` — ever receives the vault password or
+**Buys.** No wallet — not its QML, not its backend (`eth_wallet_backend`), not the
+requester `tx_sender_module`, not `eth_rpc_module`, not `railgun_module` — ever receives the vault password or
 the render text, and none of them can produce a signature. A wallet's blast
 radius is "can ask, and can broadcast what it is given."
 

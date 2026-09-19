@@ -11011,11 +11011,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789854198,
-        "narHash": "sha256-zQRpATsodFBjlRxbAhIcwHIfIXB7yDJYTLy1Lg3HjI8=",
+        "lastModified": 1789856475,
+        "narHash": "sha256-dphwXn0Kyy3AuC4sEQuekO/g2ommx8Xy647xyuDgD78=",
         "owner": "logos-co",
         "repo": "logos-tx-decoder",
-        "rev": "0174f1caeff6c4f7017dcf435e92f497e4edad8e",
+        "rev": "b051b3a16a9880669611431d3bebdd32514fcc34",
         "type": "github"
       },
       "original": {

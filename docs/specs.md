@@ -3,26 +3,25 @@
 ## What this plugin is
 
 The single approval surface for `keystore_module`. Any number of modules may
-call `request_approval`; only the keystore's configured **approver** may
+call `request_approval`; only a keystore **approver** may
 `acknowledge`, `approve` or `reject`, enforced by the keystore on the platform
 caller identity.
 
 ## Where the approver name comes from
 
-The keystore holds a **set** of approver names, and a set of custodian names
-beside it, so a terminal signer can approve *alongside* this plugin rather than
-by displacing it. `keystore_module.configure({"approvers": […], "custodians":
-[…]})` sets them: each key takes a list of module names, or a bare name where one
-is the whole answer, and the pre-list `"approver"`/`"custodian"` keys are refused
-rather than ignored. The call is **total**, not a patch — a role the document
-does not name is held by nobody, so anything configuring the custodians must
-restate the approvers in the same call or strip them. Until something calls it
-the built-in defaults stand, and this plugin is one of them: `evm_signer_ui`
-approves, `evm_keystore_ui` mutates accounts.
+This plugin is the keystore's **built-in** approver, as `evm_keystore_ui` is its
+built-in custodian: the keystore admits their calls on name alone. Any other
+approver comes from the deployer's access policy, which is set before the runtime
+starts. It is a version 2 rule on `keystore_module` that lists the approval methods
+(`pending`, `acknowledge`, `approve`, `reject`) for that module. The runtime checks
+each of its calls against the list, and the keystore admits an approval only on such
+a call, so a terminal signer can approve *alongside* this plugin rather than by
+displacing it. A `"*"` grant makes nothing an approver. There is no runtime call that
+names one: the keystore's `configure` is gone.
 
 ## What the approver role denotes
 
-> `evm_signer_ui` as the configured approver names a **plugin package**, not a
+> `evm_signer_ui` as the approver names a **plugin package**, not a
 > person and not a process. A `ui_qml` plugin registers one identity and one
 > token, shared by its QML view and its `ui-host` backend, and a callee resolves
 > both to `module:evm_signer_ui`. The keystore cannot distinguish the view from the
@@ -30,9 +29,9 @@ approves, `evm_keystore_ui` mutates accounts.
 > designated this package as the code permitted to approve**. It does not assert
 > that a human saw anything, and no token check can make it.
 >
-> And the operator is whoever called `configure` first: the call is ungated for
-> now, so the role records an honest deployer's policy rather than enforcing one
-> against a hostile co-resident module.
+> And the operator is the deployer who wrote the access policy: it is set before
+> the runtime starts, and nothing a co-resident module calls can change who holds
+> the role.
 
 ## What the split buys, and what it does not
 

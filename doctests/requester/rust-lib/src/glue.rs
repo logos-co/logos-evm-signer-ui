@@ -3,11 +3,10 @@
 //! Sequence — this module can ASK but can never APPROVE, and that is the
 //! property under test:
 //!
-//!   1. name both keystore roles              (Tier C, ungated)
-//!   2. import a known private key            (Tier D, custodian only)
-//!   3. request_approval for a message        (Tier B, named modules only)
-//!   4. poll approval_status until it settles (Tier B, receipt-gated)
-//!   5. fetch_result, print the signature     (Tier B, receipt-gated)
+//!   1. import a known private key            (Tier D, granted by the host's access policy)
+//!   2. request_approval for a message        (Tier B, named modules only)
+//!   3. poll approval_status until it settles (Tier B, receipt-gated)
+//!   4. fetch_result, print the signature     (Tier B, receipt-gated)
 //!
 //! Nothing here can reach `approve()`. The signature this prints exists only
 //! because a human typed the vault password into the signer UI.
@@ -28,13 +27,6 @@ type Shared = std::sync::Arc<std::sync::Mutex<Value>>;
 const TEST_KEY: &str = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const VAULT_PASSWORD: &str = "doctest-pw";
 const MESSAGE: &str = "I authorise the doc-test transfer";
-
-/// Who holds the keystore's two roles here. Each is a LIST; a bare string is the
-/// common single-holder spelling `configure` normalises up. The approver stays `evm_signer_ui` — it is
-/// the surface under test. The custodian is this fixture: `evm_keystore_ui` is not in
-/// this tree, and a role naming a module that is not there admits nobody, so the
-/// key import below would be refused.
-const ROLES: &str = r#"{"approvers":"evm_signer_ui","custodians":"signer_probe"}"#;
 
 /// Printed on stdout so the doc-test can assert on the app log without needing
 /// a CLI — Basecamp has none.
@@ -81,17 +73,7 @@ fn drive(state: Shared) {
     // Let the host finish wiring before the first outbound call.
     std::thread::sleep(Duration::from_millis(1500));
 
-    // 1. Tier C — name BOTH roles, because configure() is total: a role the
-    // document does not name is held by nobody, so naming only the custodian
-    // would empty the approver and Tier A would then refuse evm_signer_ui itself.
-    if let Err(e) = ok_value(modules().keystore_module.configure(ROLES)) {
-        println!("{MARK}_ERROR: configure failed: {e}");
-        set!(json!({ "ok": false, "state": "configure_failed", "error": e }));
-        return;
-    }
-    println!("{MARK}_ROLES: {ROLES}");
-
-    // 2. Tier D — admitted only because the call above named this module custodian.
+    // 1. Tier D — admitted only because the host's access policy lists this method for us.
     let address = match ok_value(modules().keystore_module.import_private_key(TEST_KEY, VAULT_PASSWORD)) {
         Ok(v) => v.get("address").and_then(Value::as_str).unwrap_or_default().to_string(),
         Err(e) => {
@@ -102,7 +84,7 @@ fn drive(state: Shared) {
     };
     println!("{MARK}_ADDRESS: {address}");
 
-    // 3/4/5. Ask, wait, collect — and RE-ASK if nobody was listening.
+    // 2/3/4. Ask, wait, collect — and RE-ASK if nobody was listening.
     //
     // The keystore gives an approver ACK_DEADLINE (3 s) to acknowledge an
     // offer; an offer nobody claims settles as `expired_no_ack`. That is

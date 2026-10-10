@@ -92,7 +92,7 @@ sections:
         check_file: "result-keystore/modules"
 
       - title: "Build the signer manager"
-        run: "nix build 'github:logos-co/logos-signer-manager-module/308b151c7460cff2300cbc8cc338f04cd7442a6a#install' --no-write-lock-file -o result-manager"
+        run: "nix build 'github:logos-co/logos-signer-manager-module/0342cbcd43596b91fa1bda8c1fa3feccf09ef635#install' --no-write-lock-file -o result-manager"
         code_block: "nix build 'github:logos-co/logos-signer-manager-module#install' --no-write-lock-file -o result-manager"
 
       - title: "The signer manager really produced modules"
@@ -566,7 +566,7 @@ sections:
           set -euo pipefail
           nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' --no-write-lock-file -o result-basecamp
           nix build 'github:logos-co/logos-evm-keystore-module/e4c6fcd39411f0ed52083f0a7fb2701e742f81f1#install-portable' --no-write-lock-file -o result-keystore-p
-          nix build 'github:logos-co/logos-signer-manager-module/308b151c7460cff2300cbc8cc338f04cd7442a6a#install-portable' --no-write-lock-file -o result-manager-p
+          nix build 'github:logos-co/logos-signer-manager-module/0342cbcd43596b91fa1bda8c1fa3feccf09ef635#install-portable' --no-write-lock-file -o result-manager-p
           nix build 'github:logos-co/logos-evm-signer-ui{release}#install-portable' --no-write-lock-file -o result-signer-p
           mkdir -p bctree/modules bctree/plugins
           cp -r result-keystore-p/modules/* bctree/modules/

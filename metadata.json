@@ -21,6 +21,11 @@
       "version": "~0.1.0"
     }
   ],
+  "uses": [
+    {
+      "intent": "keystore.accounts.unlock"
+    }
+  ],
   "provides": [
     {
       "intent": "evm.signing.approve",

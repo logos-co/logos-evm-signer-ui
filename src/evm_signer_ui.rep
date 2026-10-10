@@ -48,6 +48,8 @@ class EvmSignerUi
     PROP(QString renderedSigner="" READONLY)
     PROP(QString renderedCollects="" READONLY)
     PROP(bool renderedUnlocked=false READONLY)
+    // The account it signs with: an address, or a Bitcoin wallet's id. What an unlock names.
+    PROP(QString renderedAccount="" READONLY)
 
     // Requests signed without being shown, inside an unlock the person granted that way:
     // `[{ handle, requester, account, ageMs }]`.

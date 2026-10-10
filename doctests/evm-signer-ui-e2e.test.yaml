@@ -384,6 +384,16 @@ sections:
               # VERIFIED -- measured, by building that mutant and running it.
               value: 14
 
+            - name: "Unlocking is the keys app's, and the way there is offered"
+              # The account comes from the manager's acknowledge. This host has no shell, so the
+              # link is not followed here; doctests/probe_unlock_link.qml drives it.
+              action: expect_property
+              find_by: "objectName"
+              find_value: "signerUnlockLink"
+              property: "visible"
+              value: true
+              timeout: 5000
+
             - name: "Type the vault password"
               action: set_text
               find_by: "objectName"
@@ -447,6 +457,13 @@ sections:
               action: expect_property
               find_by: "objectName"
               find_value: "vaultPasswordField"
+              property: "visible"
+              value: false
+
+            - name: "...and nothing to unlock"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "signerUnlockLink"
               property: "visible"
               value: false
 

@@ -35,8 +35,10 @@ const MESSAGE: &str = "I authorise the doc-test transfer";
 /// admits nobody, so the key import below would be refused. Only the manager may ask
 /// the keystore to sign.
 const KEYSTORE_ROLES: &str = r#"{"custodians":"signer_probe","managers":"signer_manager_module"}"#;
-/// The manager's: the approver stays `evm_signer_ui`, the surface under test.
-const MANAGER_ROLES: &str = r#"{"approvers":"evm_signer_ui","custodians":"evm_keystore_ui","signers":"keystore_module"}"#;
+/// The manager's: the approver stays `evm_signer_ui`, the surface under test. This fixture is also
+/// its custodian, playing the keys app for the unlock in the second round.
+const MANAGER_ROLES: &str =
+    r#"{"approvers":"evm_signer_ui","custodians":["evm_keystore_ui","signer_probe"],"signers":"keystore_module"}"#;
 
 /// Printed on stdout so the doc-test can assert on the app log without needing
 /// a CLI — Basecamp has none.
@@ -75,6 +77,39 @@ fn ok_value(reply: Result<String, impl std::fmt::Debug>) -> Result<Value, String
             .unwrap_or("call failed")
             .to_string())
     }
+}
+
+/// The second round: the account unlocked for this module, each signature confirmed, so the
+/// signer approves with no password. Signs once and collects the signature.
+fn unlocked_round(address: &str) -> Result<String, String> {
+    // After the doc-test has seen the queue empty: a request arriving at once replaces that line.
+    std::thread::sleep(Duration::from_secs(8));
+    let terms = json!({ "account": address, "password": VAULT_PASSWORD, "count": 1,
+                        "apps": ["signer_probe"], "confirm": true });
+    ok_value(modules().signer_manager_module.unlock(&terms.to_string()))?;
+    // No form of the word the doc-test clicks by text, as in the first round.
+    let intent = json!({ "address": address, "purpose": "Doc-test: sign again, unlocked",
+                         "legs": [{ "kind": "message", "text": "Unlocked for one signature" }] })
+    .to_string();
+    let v = ok_value(modules().signer_manager_module.request_approval(&intent))?;
+    let field = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+    let (handle, receipt) = (field("handle"), field("receipt"));
+    println!("{MARK}_REQUESTED_UNLOCKED: {handle}");
+    for _ in 0..600 {
+        std::thread::sleep(Duration::from_millis(250));
+        let Ok(v) = ok_value(modules().signer_manager_module.approval_status(&handle, &receipt)) else { continue };
+        if matches!(v.get("state").and_then(Value::as_str), Some("offered" | "rendered" | "signing")) {
+            continue;
+        }
+        let reason = v.get("reason").and_then(Value::as_str).unwrap_or("").to_string();
+        if reason != "approved" {
+            return Err(reason);
+        }
+        let f = ok_value(modules().signer_manager_module.fetch_result(&handle, &receipt))?;
+        let _ = modules().signer_manager_module.ack_result(&handle, &receipt);
+        return Ok(f.get("signed").and_then(|s| s.get(0)).and_then(Value::as_str).unwrap_or("").to_string());
+    }
+    Err("nobody approved the unlocked request".into())
 }
 
 fn drive(state: Shared) {
@@ -227,6 +262,10 @@ fn drive(state: Shared) {
                 set!(json!({ "ok": true, "state": "signed", "address": address,
                              "handle": handle, "signed": signed }));
                 let _ = modules().signer_manager_module.ack_result(&handle, &receipt);
+                match unlocked_round(&address) {
+                    Ok(sig) => println!("{MARK}_SIGNED_UNLOCKED: {sig}"),
+                    Err(e) => println!("{MARK}_ERROR: unlocked round: {e}"),
+                }
             }
             Err(e) => {
                 println!("{MARK}_ERROR: fetch_result failed: {e}");

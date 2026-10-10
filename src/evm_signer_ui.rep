@@ -43,6 +43,15 @@ class EvmSignerUi
     PROP(QString renderedHandle="" READONLY)
     PROP(QString renderedBundleId="" READONLY)
     PROP(QString renderedRequester="" READONLY)
+    // Who signs, what it asks for (`password`, `pin`, or `nothing` for a device that asks the
+    // person itself), and whether an unlock covers this request so no secret is needed.
+    PROP(QString renderedSigner="" READONLY)
+    PROP(QString renderedCollects="" READONLY)
+    PROP(bool renderedUnlocked=false READONLY)
+
+    // Requests signed without being shown, inside an unlock the person granted that way:
+    // `[{ handle, requester, account, ageMs }]`.
+    PROP(QString unattendedJson="[]" READONLY)
     // What is actually signed, and the commitment over it.
     PROP(QStringList renderLines READONLY)
 
@@ -64,6 +73,8 @@ class EvmSignerUi
 
     // Re-read the queue from the signer manager.
     SLOT(void refresh())
+    // Re-read what was signed without being shown.
+    SLOT(void refreshUnattended())
     // Claim a request for display. Demotes whatever was rendered before. False for a
     // handle the manager does not hold, or one already settled — which a caller pointed
     // here by an intent has to be able to tell apart from a request it can service.

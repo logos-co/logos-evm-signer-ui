@@ -35,6 +35,7 @@ public:
     ~EvmSignerUiBackend() override;
 
     void refresh() override;
+    void refreshUnattended() override;
     bool acknowledge(QString handle) override;
     bool approve(QString handle, QString bundleId, QString password) override;
     bool reject(QString handle) override;

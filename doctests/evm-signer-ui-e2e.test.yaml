@@ -21,6 +21,9 @@ intro: |
   5. The password is typed into the UI and Approve is clicked; the manager has the
      keystore sign and checks the signatures.
   6. The requester collects a real secp256k1 signature with its receipt.
+  7. `signer_probe`, playing the keys app, unlocks the account for its own requests, each
+     signature confirmed, and asks again: the signer says the account is unlocked, shows no
+     password field, and the approval needs nothing typed.
 
   Every refusal on the way is asserted too, because they are the design: the
   requester can ask and collect but can never approve, and nothing signs until
@@ -89,7 +92,7 @@ sections:
         check_file: "result-keystore/modules"
 
       - title: "Build the signer manager"
-        run: "nix build 'github:logos-co/logos-signer-manager-module/67859da29c14e1ffe1da306e0c31fdafb33a0a02#install' --no-write-lock-file -o result-manager"
+        run: "nix build 'github:logos-co/logos-signer-manager-module/308b151c7460cff2300cbc8cc338f04cd7442a6a#install' --no-write-lock-file -o result-manager"
         code_block: "nix build 'github:logos-co/logos-signer-manager-module#install' --no-write-lock-file -o result-manager"
 
       - title: "The signer manager really produced modules"
@@ -205,7 +208,7 @@ sections:
 
           ```json
           keystore_module.configure({"custodians": "signer_probe", "managers": "signer_manager_module"})
-          signer_manager_module.configure({"approvers": "evm_signer_ui", "custodians": "evm_keystore_ui", "signers": "keystore_module"})
+          signer_manager_module.configure({"approvers": "evm_signer_ui", "custodians": ["evm_keystore_ui", "signer_probe"], "signers": "keystore_module"})
           ```
 
           **Every role in each call, deliberately.** `configure` is *total*, not
@@ -435,6 +438,35 @@ sections:
               timeout: 5000
               screenshot: "evm-signer-ui-approved.png"
 
+            - name: "Unlocked for this app: the signer says so, in the CLI's words"
+              # The probe, playing the keys app as the manager's custodian, unlocked the account
+              # for its own requests with each signature confirmed, and asked again.
+              action: wait_for
+              texts: ["Signer: keystore_module — this account is unlocked: no password"]
+              timeout: 20000
+
+            - name: "No password field while unlocked"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "vaultPasswordField"
+              property: "visible"
+              value: false
+
+            - name: "Approve arms after the dwell, with nothing typed"
+              action: wait_for
+              texts: ["Approve"]
+              timeout: 5000
+
+            - name: "Approve, unlocked"
+              action: click
+              target: "Approve"
+
+            - name: "Signed inside the unlock"
+              action: wait_for
+              texts: ["Approved — 1 item signed"]
+              timeout: 20000
+              screenshot: "evm-signer-ui-unlocked.png"
+
 
 
   - title: "The same plugin inside Basecamp"
@@ -463,7 +495,7 @@ sections:
           set -euo pipefail
           nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' --no-write-lock-file -o result-basecamp
           nix build 'github:logos-co/logos-evm-keystore-module/e4c6fcd39411f0ed52083f0a7fb2701e742f81f1#install-portable' --no-write-lock-file -o result-keystore-p
-          nix build 'github:logos-co/logos-signer-manager-module/67859da29c14e1ffe1da306e0c31fdafb33a0a02#install-portable' --no-write-lock-file -o result-manager-p
+          nix build 'github:logos-co/logos-signer-manager-module/308b151c7460cff2300cbc8cc338f04cd7442a6a#install-portable' --no-write-lock-file -o result-manager-p
           nix build 'github:logos-co/logos-evm-signer-ui{release}#install-portable' --no-write-lock-file -o result-signer-p
           mkdir -p bctree/modules bctree/plugins
           cp -r result-keystore-p/modules/* bctree/modules/

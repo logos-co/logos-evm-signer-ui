@@ -96,6 +96,20 @@ Item {
         try { return JSON.parse(backend ? backend.pendingJson : "[]") } catch (e) { return [] }
     }
     readonly property bool showing: ready && backend.renderedHandle !== ""
+    // No secret to type: an unlock covers this request, or its device asks the person itself.
+    readonly property bool needsSecret: showing && !backend.renderedUnlocked && backend.renderedCollects !== "nothing"
+    readonly property var unattended: {
+        try { return JSON.parse(backend ? backend.unattendedJson : "[]") } catch (e) { return [] }
+    }
+    // The same words as evm_signer_cli's `signer:` line: one request reads alike on both.
+    readonly property string signerLine: {
+        if (!showing || backend.renderedSigner === "") return ""
+        var how = backend.renderedUnlocked ? "this account is unlocked: no password"
+                : backend.renderedCollects === "nothing" ? "confirm on the device when it asks"
+                : backend.renderedCollects === "pin" ? "asks for the card's PIN"
+                : "asks for the account's password"
+        return "Signer: " + backend.renderedSigner + " — " + how
+    }
 
     component Section: Rectangle {
         id: sec
@@ -205,6 +219,26 @@ Item {
             }
         }
 
+        // ── signed without asking ───────────────────────────────────────────
+        // Inside an unlock the person granted without confirmation: listed, so it is never unseen twice.
+        LogosText {
+            objectName: "unattendedHeading"
+            visible: !root.showing && root.unattended.length > 0
+            text: "Signed without asking:"
+            textFormat: Text.PlainText
+            font.bold: true
+        }
+        Repeater {
+            model: root.showing ? [] : root.unattended
+            delegate: LogosText {
+                objectName: "unattendedLine"
+                Layout.fillWidth: true
+                text: (modelData.requester || "unknown") + " — " + modelData.account
+                textFormat: Text.PlainText
+                elide: Text.ElideRight
+            }
+        }
+
         // ── the request under review ────────────────────────────────────────
         //
         // Three sections, in this order and never merged: who is asking and what THEY
@@ -298,15 +332,25 @@ Item {
                 }
             }
 
+            LogosText {
+                objectName: "signerLine"
+                visible: root.signerLine !== ""
+                Layout.fillWidth: true
+                text: root.signerLine
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+            }
+
             LogosTextField {
                 id: pw
                 // Addressable by name: the doc-test harness locates fields with
                 // find_by "objectName", and a type name is not stable (QML
                 // decorates it, e.g. LogosTextField_QMLTYPE_18).
                 objectName: "vaultPasswordField"
+                visible: root.needsSecret
                 Layout.fillWidth: true
                 echoMode: TextInput.Password
-                placeholderText: "Vault password"
+                placeholderText: root.showing && backend.renderedCollects === "pin" ? "Card PIN" : "Vault password"
 
                 // Mask every character immediately. Qt's default reveals the
                 // last character typed for a second, which is exactly the
@@ -347,10 +391,11 @@ Item {
                     // The dwell flag is owned by C++, so editing this binding
                     // cannot shorten it; the backend refuses early approvals
                     // regardless of what the view believes.
-                    enabled: root.ready && backend.dwellElapsed && pw.text.length > 0
+                    enabled: root.ready && backend.dwellElapsed && (!root.needsSecret || pw.text.length > 0)
                     text: backend.dwellElapsed ? "Approve" : "Reading…"
                     onClicked: {
-                        backend.approve(backend.renderedHandle, backend.renderedBundleId, pw.text)
+                        backend.approve(backend.renderedHandle, backend.renderedBundleId,
+                                        root.needsSecret ? pw.text : "")
                         pw.text = ""
                     }
                 }

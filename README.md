@@ -3,12 +3,14 @@
 The signing approval surface for the Logos EVM wallet.
 
 Many modules may **request** a signature. Only this plugin may **approve** one:
-`keystore_module` refuses `acknowledge`/`approve`/`reject` to every other caller.
+[`signer_manager_module`](https://github.com/logos-co/logos-signer-manager-module)
+refuses `acknowledge`/`approve`/`reject` to every other caller, and has the
+account's signer (`keystore_module` for keys kept in files) sign once it approves.
 
 It is wallet-agnostic by construction — its only REQUIRED dependency is
-`keystore_module`, so it has no client for any wallet, chain or RPC module and
-cannot be told what an intent means. It renders the lines the keystore authored,
-verbatim, and takes the vault password.
+`signer_manager_module`, so it has no client for any wallet, chain or RPC module
+and cannot be told what an intent means. It renders the lines the manager
+authored, verbatim, and takes the vault password.
 
 It does ask one other module, optionally. `token_list_module` can say what the
 address being signed to is called and how its amounts scale, and those lines

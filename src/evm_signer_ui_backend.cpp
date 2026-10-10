@@ -37,7 +37,7 @@ EvmSignerUiBackend::~EvmSignerUiBackend()
 
 // Read the calldata back out of the very text on screen and decode it offline.
 //
-// The keystore hands an approver `render_lines` and nothing else — no
+// The signer manager hands an approver `render_lines` and nothing else — no
 // structured `to` or `data` — and that turns out to be the right input rather
 // than a limitation: an interpretation derived from the displayed text cannot
 // describe different bytes than the human is reading.
@@ -105,7 +105,7 @@ int amountArg(const QString &signature)
     return -1;
 }
 
-// Exact, never rounded — the same rule the keystore's own figures follow. A value this
+// Exact, never rounded — the same rule the manager's own figures follow. A value this
 // cannot read scales to nothing rather than to a guess: reading 6-decimal USDC as 18 is
 // wrong by a factor of a trillion, in the direction that looks harmless.
 QString scaleUnits(const QString &raw, int decimals)
@@ -205,7 +205,7 @@ QStringList EvmSignerUiBackend::tokenListLines(const QJsonObject &leg) const
 void EvmSignerUiBackend::onContextReady()
 {
     // Null on failure, and that is survivable: every other property is
-    // unaffected and the sheet still renders the keystore's lines.
+    // unaffected and the sheet still renders the manager's lines.
     m_decoder = logos_tx_decoder_new();
 
     m_dwell.setSingleShot(true);
@@ -231,12 +231,12 @@ void EvmSignerUiBackend::onContextReady()
     // Note this is about EVENT CALLBACKS specifically. onContextReady is a
     // normal place to call out from and needs no such treatment -- that is the
     // documented pattern, and arming these subscriptions from there is fine.
-    modules().keystore_module.onApproval_offered([this](QString) { refreshSoon(); });
-    modules().keystore_module.onApproval_settled([this](QString handle, QString state) {
+    modules().signer_manager_module.onApproval_offered([this](QString) { refreshSoon(); });
+    modules().signer_manager_module.onApproval_settled([this](QString handle, QString state) {
         if (handle == renderedHandle()) {
             clearRendered();
         }
-        // Relayed so the view can end an intent it is holding for this handle. The keystore
+        // Relayed so the view can end an intent it is holding for this handle. The manager's
         // event is the only place that sees EVERY way a request ends -- this sheet, the
         // queue by hand, or a surface that is not this one -- and an intent answered from a
         // button instead would stay open whenever the human took another route.
@@ -265,12 +265,12 @@ void EvmSignerUiBackend::refresh()
     m_inFlight = true;
     const auto done = qScopeGuard([this] { m_inFlight = false; });
 
-    const QJsonObject reply = parseObject(modules().keystore_module.pending());
+    const QJsonObject reply = parseObject(modules().signer_manager_module.pending());
     if (!reply.value(QStringLiteral("ok")).toBool()) {
-        // Distinguish "the keystore refused us" from "we never reached the
-        // keystore". Collapsing the two is not a cosmetic sin: a transport
+        // Distinguish "the manager refused us" from "we never reached the
+        // manager". Collapsing the two is not a cosmetic sin: a transport
         // timeout reported as "not the approver" sends whoever reads it hunting
-        // an authorization problem that does not exist. The keystore's own
+        // an authorization problem that does not exist. The manager's own
         // refusal is the exact string "not authorized"; anything else here --
         // an empty reply, a timeout, unparseable JSON -- is the call failing.
         const QString err = reply.value(QStringLiteral("error")).toString();
@@ -280,10 +280,10 @@ void EvmSignerUiBackend::refresh()
                 "or approve signing requests."));
             setStatusText(QStringLiteral("Not the approver"));
         } else {
-            setLastError(QStringLiteral("Could not reach the keystore%1")
+            setLastError(QStringLiteral("Could not reach the signer manager%1")
                              .arg(err.isEmpty() ? QStringLiteral(".")
                                                 : QStringLiteral(": %1").arg(err)));
-            setStatusText(QStringLiteral("Keystore unreachable"));
+            setStatusText(QStringLiteral("Signer manager unreachable"));
         }
         return;
     }
@@ -303,13 +303,12 @@ void EvmSignerUiBackend::refresh()
     // Acknowledge receipt automatically.
     //
     // `acknowledge` means "this approver has the request on screen", NOT "the
-    // human decided" — the keystore gives an approver only ACK_DEADLINE (3s)
-    // to claim an offer, and after the claim there is deliberately no deadline
-    // at all, because a person is reading. Waiting for a click here would put
-    // a 3-second timer on a human, which is exactly the deadline the design
-    // says must not exist: every request would expire before it could be read.
+    // human decided" — the manager drops an offer nobody claims within a minute,
+    // and after the claim there is deliberately no deadline at all, because a
+    // person is reading. Waiting for a click here would put that timer on a
+    // human, which is exactly the deadline the design says must not exist.
     //
-    // Only ever one at a time: the keystore keeps at most one record Rendered
+    // Only ever one at a time: the manager keeps at most one record Rendered
     // (claiming another demotes the previous), and that single Rendered record
     // is what binds the text a human read to the approval they then give. So
     // claim the head of the queue and leave the rest Offered; a requester that
@@ -325,21 +324,21 @@ void EvmSignerUiBackend::refresh()
 
 bool EvmSignerUiBackend::acknowledge(QString handle)
 {
-    const QJsonObject r = parseObject(modules().keystore_module.acknowledge(handle));
+    const QJsonObject r = parseObject(modules().signer_manager_module.acknowledge(handle));
     if (!r.value(QStringLiteral("ok")).toBool()) {
         setLastError(r.value(QStringLiteral("error")).toString(QStringLiteral("could not open that request")));
         clearRendered();
         return false;
     }
 
-    // Verbatim. The keystore is the only party that parsed the intent, so it is
+    // Verbatim. The manager is the only party that parsed the intent, so it is
     // the only one that can tell requester-supplied text from its own — this
     // backend must not "improve" any of it.
     QStringList lines;
     for (const QJsonValue &v : r.value(QStringLiteral("render_lines")).toArray()) {
         lines << v.toString();
     }
-    // The requester's own claim about the bundle, which the keystore keeps in a
+    // The requester's own claim about the bundle, which the manager keeps in a
     // SEPARATE list. Dropping it hid the one line saying what the signature is
     // claimed to be for, leaving the human to approve a commitment and a digest.
     // It is never merged into `lines`: the split is the only thing that lets the
@@ -376,10 +375,15 @@ bool EvmSignerUiBackend::approve(QString handle, QString bundleId, QString passw
         return false;
     }
 
-    const QJsonObject r = parseObject(modules().keystore_module.approve(handle, bundleId, password));
+    const QJsonObject r = parseObject(modules().signer_manager_module.approve(handle, bundleId, password));
     password.fill(QChar(0));
 
     const bool ok = r.value(QStringLiteral("ok")).toBool();
+    if (ok && r.value(QStringLiteral("state")).toString() == QStringLiteral("signing")) {
+        // A device signs in its own time; the manager's settled event ends the sheet.
+        setStatusText(QStringLiteral("Confirm on the signing device"));
+        return true;
+    }
     if (ok) {
         // Confirm what was authorised. approve() answers with a COUNT, never the
         // signatures — the approver causes them to exist and never sees them,
@@ -392,7 +396,7 @@ bool EvmSignerUiBackend::approve(QString handle, QString bundleId, QString passw
         m_confirmUntil = QDateTime::currentDateTimeUtc().addSecs(kConfirmSeconds);
 
         // Drop the approved request from the queue HERE, in the same slot that
-        // records the outcome. The keystore has already settled the record, so
+        // records the outcome. The manager has already settled the record, so
         // this only says what is now true -- but saying it now is what makes it
         // reliable: the refresh() below can be swallowed whole by the m_inFlight
         // guard if a poll is already blocked inside pending(), and a pending()
@@ -409,9 +413,10 @@ bool EvmSignerUiBackend::approve(QString handle, QString bundleId, QString passw
         setPendingJson(QString::fromUtf8(QJsonDocument(rest).toJson(QJsonDocument::Compact)));
     }
     if (!ok) {
-        // Deliberately generic: the keystore does not distinguish a wrong
-        // password from a stale commitment, and neither should this.
-        setLastError(QStringLiteral("Could not approve. Check the password and try again."));
+        // Generic but for a signer that did not answer, which no password fixes.
+        const bool unreachable = r.value(QStringLiteral("code")).toString() == QStringLiteral("unavailable");
+        setLastError(unreachable ? QStringLiteral("The signer did not answer. Try again.")
+                                 : QStringLiteral("Could not approve. Check the password and try again."));
         return false;
     }
     clearRendered();
@@ -421,7 +426,7 @@ bool EvmSignerUiBackend::approve(QString handle, QString bundleId, QString passw
 
 bool EvmSignerUiBackend::reject(QString handle)
 {
-    const bool ok = modules().keystore_module.reject(handle);
+    const bool ok = modules().signer_manager_module.reject(handle);
     if (ok) {
         clearRendered();
     }

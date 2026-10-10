@@ -1,13 +1,13 @@
 {
   "name": "signer_probe",
   "version": "1.0.0",
-  "description": "Doc-test fixture: a Tier B requester. Imports a known key, asks the keystore for a signature, and prints the signature once a human approves it.",
+  "description": "Doc-test fixture: a requester of the signer manager. Imports a known key into the keystore, asks the manager for a signature, and prints the signature once a human approves it.",
   "author": "Logos Core Team",
   "type": "core",
   "interface": "cdylib",
   "category": "test",
   "main": "signer_probe_plugin",
-  "dependencies": ["keystore_module"],
+  "dependencies": ["keystore_module", "signer_manager_module"],
   "include": [],
   "capabilities": [],
   "codegen": {

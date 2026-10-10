@@ -2,30 +2,31 @@
 
 ## What this plugin is
 
-The single approval surface for `keystore_module`. Any number of modules may
-call `request_approval`; only the keystore's configured **approver** may
-`acknowledge`, `approve` or `reject`, enforced by the keystore on the platform
-caller identity.
+The single approval surface for `signer_manager_module`. Any number of modules
+may call `request_approval`; only the manager's configured **approver** may
+`acknowledge`, `approve` or `reject`, enforced by the manager on the platform
+caller identity. The manager then has the account's signer sign: `keystore_module`
+for keys kept in files, and it alone may ask the keystore to.
 
 ## Where the approver name comes from
 
-The keystore holds a **set** of approver names, and a set of custodian names
-beside it, so a terminal signer can approve *alongside* this plugin rather than
-by displacing it. `keystore_module.configure({"approvers": […], "custodians":
-[…]})` sets them: each key takes a list of module names, or a bare name where one
-is the whole answer, and the pre-list `"approver"`/`"custodian"` keys are refused
-rather than ignored. The call is **total**, not a patch — a role the document
-does not name is held by nobody, so anything configuring the custodians must
-restate the approvers in the same call or strip them. Until something calls it
-the built-in defaults stand, and this plugin is one of them: `evm_signer_ui`
-approves, `evm_keystore_ui` mutates accounts.
+The manager holds a **set** of approver names, a set of custodian names and the
+list of signers it asks, so a terminal signer can approve *alongside* this plugin
+rather than by displacing it. `signer_manager_module.configure({"approvers": […],
+"custodians": […], "signers": […]})` sets them: each key takes a list of module
+names, or a bare name where one is the whole answer. The call is **total**, not a
+patch — a role the document does not name is held by nobody, so anything
+configuring the custodians must restate the approvers and the signers in the same
+call or strip them. Until something calls it the built-in defaults stand, and
+this plugin is one of them: `evm_signer_ui` approves, `evm_keystore_ui` opens and
+unlocks accounts, `keystore_module` signs.
 
 ## What the approver role denotes
 
 > `evm_signer_ui` as the configured approver names a **plugin package**, not a
 > person and not a process. A `ui_qml` plugin registers one identity and one
 > token, shared by its QML view and its `ui-host` backend, and a callee resolves
-> both to `module:evm_signer_ui`. The keystore cannot distinguish the view from the
+> both to `module:evm_signer_ui`. The manager cannot distinguish the view from the
 > backend and does not pretend to. What the role asserts is that **the operator
 > designated this package as the code permitted to approve**. It does not assert
 > that a human saw anything, and no token check can make it.
@@ -43,19 +44,19 @@ radius is "can ask, and can broadcast what it is given."
 
 **Does not buy.** In Basecamp this plugin's QML and every other plugin's QML run
 in the **same process**. Each gets its own engine and sandbox, but one address
-space holds both. This is a **code-authority boundary enforced by the keystore's
+space holds both. This is a **code-authority boundary enforced by the manager's
 caller check, not a process boundary** between requester and approver. Anyone
 expecting the latter will be wrong.
 
 ## Rendering rules
 
-- `renderLines` come from `keystore_module.acknowledge` and are displayed
+- `renderLines` come from `signer_manager_module.acknowledge` and are displayed
   **verbatim**. The backend may not reformat, elide, truncate or re-order them,
   and the view may not derive display text from anything else.
 - Every text item in the request region sets `textFormat: Text.PlainText`.
   `LogosText` is a bare `Text` with no `textFormat`, i.e. Qt's `AutoText` HTML
   autodetection, so a line containing markup would otherwise render as markup.
-- Sanitisation is the **keystore's** job, not the view's. It is the only party
+- Sanitisation is the **manager's** job, not the view's. It is the only party
   that parsed the intent and the only one that can tell requester-supplied text
   from its own.
 

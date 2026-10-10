@@ -1,6 +1,6 @@
 // Three sections, and the requester's words confined to the first of them.
 //
-// The keystore hands an approver two lists precisely so this surface can keep them
+// The signer manager hands an approver two lists precisely so this surface can keep them
 // apart. Nothing in the C++ or the QML compiler can tell whether it did: appending
 // `claimLines` to `renderLines` in the view would render identically to a reader
 // scanning a screenshot, and would put requester-authored text under the heading that
@@ -138,13 +138,13 @@ Item {
         console.log("")
         console.log("and this is the one that matters. The requester controls `purpose`")
         console.log("entirely. Under the heading that says the signature covers this, its")
-        console.log("text would be a stranger writing in the keystore's hand")
+        console.log("text would be a stranger writing in the manager's hand")
         check("the claim is NOT in section 2",
               probe.sectionTexts("sectionSigned").indexOf(probe.claim) >= 0, false)
         check("...nor in section 3",
               probe.sectionTexts("sectionInterpretation").indexOf(probe.claim) >= 0, false)
         console.log("")
-        console.log("and the requester is named from the keystore's own field, not from")
+        console.log("and the requester is named from the manager's own field, not from")
         console.log("anything the requester filled in")
         check("section 1 names who asked",
               probe.sectionTexts("sectionRequester").indexOf("eth_wallet_backend") >= 0, true)

@@ -6,10 +6,10 @@ import Logos.Theme
 
 // The signing approval surface.
 //
-// This view renders the keystore's own lines VERBATIM and collects the vault
+// This view renders the signer manager's own lines VERBATIM and collects the vault
 // password. It never parses an intent — it has no client for any wallet module
-// and could not decode one. Every line on screen came from the signer that will
-// produce the signature.
+// and could not decode one. Every line on screen came from the manager that will
+// have the signature produced.
 //
 // Rendering rule: every text item in the request region sets
 // `textFormat: Text.PlainText` explicitly. LogosText is a bare Text with no
@@ -38,7 +38,7 @@ Item {
     // with a backend that is in fact working.
     property bool ready: false
 
-    // Intents being serviced, keyed by the keystore handle each one named. A provider can
+    // Intents being serviced, keyed by the manager handle each one named. A provider can
     // be dispatched more than once while a request is open and `acknowledge` shows exactly
     // one at a time, so this is what lets a displaced request be answered now rather than
     // left to the shell's ten-minute backstop.
@@ -63,7 +63,7 @@ Item {
             if (intent !== "evm.signing.approve") return
 
             // Acknowledging demotes whatever is on screen, so an intent held for THAT
-            // request is about to be displaced. End it here: its keystore record is
+            // request is about to be displaced. End it here: its manager record is
             // untouched and its requester falls back to waiting, which is a better answer
             // than one that arrives as `timeout` ten minutes later.
             var shown = root.ready ? backend.renderedHandle : ""
@@ -72,7 +72,7 @@ Item {
 
             root.intentByHandle[params.handle] = requestId
             logos.watch(backend.acknowledge(params.handle), function (opened) {
-                // A handle this keystore does not hold, or one already settled. No retry of
+                // A handle the manager does not hold, or one already settled. No retry of
                 // the same payload fixes that, which is what `bad_request` means — and it is
                 // deliberately the same answer the shell gives for a payload it refused
                 // itself, so neither reveals whether the other was consulted.
@@ -141,7 +141,7 @@ Item {
         }
     }
 
-    // A line of the keystore's or the requester's text. Monospace and plain: see
+    // A line of the manager's or the requester's text. Monospace and plain: see
     // the rendering rule at the top of this file.
     component Line: LogosText {
         Layout.fillWidth: true
@@ -209,7 +209,7 @@ Item {
         //
         // Three sections, in this order and never merged: who is asking and what THEY
         // say it is for; what is actually signed; and what this signer makes of that.
-        // The first is requester-authored, the second is the keystore's, the third is
+        // The first is requester-authored, the second is the manager's, the third is
         // this backend's — and a human has to be able to tell them apart at a glance,
         // because the whole class of attack here is text that looks like it came from
         // somewhere more trustworthy than it did.
@@ -255,8 +255,8 @@ Item {
                         objectName: "sectionSigned"
                         number: 2
                         heading: "What you are signing"
-                        caption: "The keystore's own reading of the request, shown in " +
-                                 "full and never shortened. This is what the signature " +
+                        caption: "The signer manager's own reading of the request, shown " +
+                                 "in full and never shortened. This is what the signature " +
                                  "will cover."
 
                         Repeater {

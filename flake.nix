@@ -4,10 +4,11 @@
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
     # The only REQUIRED module dependency, deliberately: this plugin cannot ask
-    # anyone what an intent MEANS — it renders the lines the keystore authored,
-    # and section 3 is decoded from those very lines by a linked-in library.
-    keystore_module = {
-      url = "github:logos-co/logos-evm-keystore-module";
+    # anyone what an intent MEANS — it renders the lines the signer manager
+    # authored, and section 3 is decoded from those very lines by a linked-in
+    # library. Pinned to the manager's first branch until it reaches main.
+    signer_manager_module = {
+      url = "github:logos-co/logos-signer-manager-module/67859da29c14e1ffe1da306e0c31fdafb33a0a02";
       # Without the follows it drags its own module-builder, and a skewed generated
       # ABI segfaults the module inside provider init.
       inputs.logos-module-builder.follows = "logos-module-builder";

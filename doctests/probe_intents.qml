@@ -1,4 +1,4 @@
-// Servicing an intent, LOADED and DRIVEN, with no shell, no host and no keystore.
+// Servicing an intent, LOADED and DRIVEN, with no shell, no host and no signer manager.
 //
 // The e2e spec beside this proves the plugin signs. It cannot reach the intent half at all:
 // there is no shell in `logos-standalone-app` to dispatch one. So `logos` is fabricated here
@@ -7,7 +7,7 @@
 //
 // What is asserted is every way a request can end, because ending exactly once is the whole
 // contract: approved, rejected, walked away from, displaced by a second dispatch, and named
-// by a handle this keystore does not hold.
+// by a handle the manager does not hold.
 import QtQuick
 
 Item {
@@ -89,9 +89,9 @@ Item {
 
     property var logos: shell
 
-    // ── the fabricated keystore-facing backend ────────────────────────────────
+    // ── the fabricated manager-facing backend ────────────────────────────────
     //
-    // `acknowledge` is the one with a decision in it: false for a handle the keystore does
+    // `acknowledge` is the one with a decision in it: false for a handle the manager does
     // not hold, which is what the view has to be able to tell from a serviceable one.
     QtObject {
         id: fake
@@ -107,7 +107,7 @@ Item {
         property var interpretationLines: []
         property bool dwellElapsed: true
 
-        // Handles this keystore holds. Anything else is unknown to it.
+        // Handles the manager holds. Anything else is unknown to it.
         property var known: [probe.handleA, probe.handleB]
         property var acknowledged: []
 
@@ -173,7 +173,7 @@ Item {
 
     function assertApprovalEndsIt() {
         console.log("")
-        console.log("the human approves. The answer comes from the keystore's own settle")
+        console.log("the human approves. The answer comes from the manager's own settle")
         console.log("event, not from the button: a request can settle from the queue by hand")
         console.log("or from a surface that is not this one, and an intent answered on a click")
         console.log("would stay open for ever in exactly those cases")
@@ -203,7 +203,7 @@ Item {
 
     function assertAnUnknownHandleIsABadRequest() {
         console.log("")
-        console.log("a handle this keystore does not hold — stale, or never real. No retry of")
+        console.log("a handle the manager does not hold — stale, or never real. No retry of")
         console.log("the same payload fixes that, which is what `bad_request` means. It is")
         console.log("also the shell's own answer for a payload IT refused, so neither reveals")
         console.log("whether the other was consulted")
@@ -229,7 +229,7 @@ Item {
         check("...and is still open", probe.responsesFor("req-5").length, 0)
 
         console.log("")
-        console.log("and the displaced one's keystore record is untouched, so settling it")
+        console.log("and the displaced one's manager record is untouched, so settling it")
         console.log("later must not answer an intent that is already closed")
         fake.settled(probe.handleA, "approved")
         check("no second answer for it", probe.responsesFor("req-4").length, 1)

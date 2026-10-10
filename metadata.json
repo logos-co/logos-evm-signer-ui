@@ -5,13 +5,13 @@
   "type": "ui_qml",
   "interface": "universal",
   "category": "wallet",
-  "description": "The signing approval surface: shows what a module asked to sign, in the keystore's own words, and takes the vault password.",
+  "description": "The signing approval surface: shows what a module asked to sign, in the signer manager's own words, and takes the vault password.",
   "main": "evm_signer_ui_plugin",
   "icon": "src/icons/signer.png",
   "view": "qml/SignerView.qml",
   "dependencies": [
     {
-      "name": "keystore_module",
+      "name": "signer_manager_module",
       "version": "~0.1.0"
     }
   ],
@@ -29,7 +29,7 @@
           "name": "handle",
           "type": "string",
           "required": true,
-          "description": "The keystore's own name for the approval record to show"
+          "description": "The signer manager's own name for the approval record to show"
         }
       ]
     }

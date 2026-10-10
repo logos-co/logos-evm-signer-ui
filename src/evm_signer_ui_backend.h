@@ -14,11 +14,11 @@ struct LogosTxDecoder;
 
 // The signer UI backend.
 //
-// Every keystore call is made here, over the generated typed client: one client,
+// Every signer manager call is made here, over the generated typed client: one client,
 // one session token, negotiated once and reused. The QML half renders and takes
 // the password; it makes no module calls of its own.
 //
-// The keystore's render lines pass through untouched; the backend may not
+// The manager's render lines pass through untouched; the backend may not
 // reformat or re-order them. It additionally decodes the calldata found IN those
 // lines, offline, via the linked-in logos-tx-decoder, and publishes the reading
 // separately as `interpretationLines`. It has no client for any wallet or chain

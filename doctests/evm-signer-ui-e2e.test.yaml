@@ -6,30 +6,32 @@ intro: |
   This doc-test proves the whole point of `evm_signer_ui`: **a module can ask for a
   signature, but only a human can produce one.**
 
-  It runs the real chain headlessly — a requesting module, the keystore, and the
-  signer UI — and drives the UI the way a person would, through
+  It runs the real chain headlessly — a requesting module, the signer manager, the
+  keystore, and the signer UI — and drives the UI the way a person would, through
   [`logos-qt-mcp`](https://github.com/logos-co/logos-qt-mcp):
 
-  1. `signer_probe` names who holds the keystore's two roles — `evm_signer_ui`
-     approves, `signer_probe` mutates accounts — in one `configure` call.
-  2. `signer_probe` (a Tier B requester) imports a known key and asks for a
+  1. `signer_probe` names who holds the roles: the keystore's custodian
+     (`signer_probe`) and manager (`signer_manager_module`), and the manager's
+     approver (`evm_signer_ui`) and signer (`keystore_module`).
+  2. `signer_probe` (a requester) imports a known key and asks the manager for a
      signature on a message.
-  3. The keystore parks the request and announces it.
+  3. The manager parks the request and announces it.
   4. `evm_signer_ui` — the only module allowed to approve — acknowledges receipt and
-     renders **the keystore's own words**, verbatim.
-  5. The password is typed into the UI and Approve is clicked.
+     renders **the manager's own words**, verbatim.
+  5. The password is typed into the UI and Approve is clicked; the manager has the
+     keystore sign and checks the signatures.
   6. The requester collects a real secp256k1 signature with its receipt.
 
   Every refusal on the way is asserted too, because they are the design: the
   requester can ask and collect but can never approve, and nothing signs until
   the human acts.
 
-what_you_build: "The keystore, the signer UI and a requesting module, run together in a headless app and driven through the real QML surface to produce one signature."
+what_you_build: "The keystore, the signer manager, the signer UI and a requesting module, run together in a headless app and driven through the real QML surface to produce one signature."
 
 what_you_learn:
-  - "Why signing needs an approver at all — and what the keystore shows the human"
-  - "How Tier A (approve), Tier B (request) and Tier D (account mutation) are separated by caller identity"
-  - "Why naming one keystore role means naming both, and what an unnamed role admits"
+  - "Why signing needs an approver at all — and what the signer manager shows the human"
+  - "How approving, requesting and account mutation are separated by caller identity"
+  - "Why naming one role means naming them all, and what an unnamed role admits"
   - "Why the requester re-offers when nobody is listening, and what it tells the user"
   - "How to drive a Logos UI plugin headlessly and assert on what it rendered"
 
@@ -42,11 +44,11 @@ sections:
   - title: "Build the pieces"
     step: true
     text: |
-      Three modules and a host. `signer_probe` is a doc-test fixture that lives
+      Four modules and a host. `signer_probe` is a doc-test fixture that lives
       in this repo: something has to *ask* for a signature, and it has to be a
-      named module, because Tier B refuses the host anchor and therefore refuses
-      the CLI. It also imports the key it later asks to sign with, which is
-      account mutation — so it has to hold the keystore's custodian role too;
+      named module, because the manager refuses the host anchor and therefore
+      refuses the CLI. It also imports the key it later asks to sign with, which
+      is account mutation — so it has to hold the keystore's custodian role too;
       the next section is where that is arranged.
     steps:
       - title: "The host and the test driver"
@@ -75,7 +77,7 @@ sections:
       # flake.lock, so nix wants to write one into a read-only source and fails
       # with "cannot write modified lock file".
       - title: "Build the keystore"
-        run: "nix build 'github:logos-co/logos-evm-keystore-module{release}#install' --no-write-lock-file -o result-keystore"
+        run: "nix build 'github:logos-co/logos-evm-keystore-module/e4c6fcd39411f0ed52083f0a7fb2701e742f81f1#install' --no-write-lock-file -o result-keystore"
         code_block: "nix build 'github:logos-co/logos-evm-keystore-module#install' --no-write-lock-file -o result-keystore"
 
       # Its own step ON PURPOSE: the harness dispatches
@@ -85,6 +87,13 @@ sections:
       # that nix exited 0, never that it produced anything.
       - title: "The keystore really produced modules"
         check_file: "result-keystore/modules"
+
+      - title: "Build the signer manager"
+        run: "nix build 'github:logos-co/logos-signer-manager-module/67859da29c14e1ffe1da306e0c31fdafb33a0a02#install' --no-write-lock-file -o result-manager"
+        code_block: "nix build 'github:logos-co/logos-signer-manager-module#install' --no-write-lock-file -o result-manager"
+
+      - title: "The signer manager really produced modules"
+        check_file: "result-manager/modules"
 
       - title: "Build the signer UI"
         run: "nix build 'github:logos-co/logos-evm-signer-ui{release}#install' --no-write-lock-file -o result-signer"
@@ -148,6 +157,7 @@ sections:
           set -euo pipefail
           mkdir -p tree/modules tree/plugins
           cp -r result-keystore/modules/*   tree/modules/
+          cp -r result-manager/modules/*    tree/modules/
           cp -r result-probe/modules/*      tree/modules/
           cp -r result-capability/modules/* tree/modules/
           cp -r result-tokenlist/modules/*  tree/modules/
@@ -157,12 +167,14 @@ sections:
         code_block: |
           mkdir -p tree/modules tree/plugins
           cp -r result-keystore/modules/*   tree/modules/
+          cp -r result-manager/modules/*    tree/modules/
           cp -r result-probe/modules/*      tree/modules/
           cp -r result-capability/modules/* tree/modules/
           cp -r result-tokenlist/modules/*  tree/modules/
           cp -r result-signer/plugins/*     tree/plugins/
         expect_contains:
           - "keystore_module"
+          - "signer_manager_module"
           - "signer_probe"
           - "evm_signer_ui"
 
@@ -177,33 +189,36 @@ sections:
       - `QML_INSPECTOR_PORT=3768` — the QML inspector is compiled in but only
         listens when this is set.
     steps:
-      - title: "Name who holds the two keystore roles"
+      - title: "Name who holds the roles"
         text: |
-          Nothing here may touch the keystore until it is told who holds its two
-          roles. `keystore_module` gates **approval** (Tier A: `pending`,
-          `acknowledge`, `approve`, `reject`) on a configured *approver*, and
-          **account mutation** (Tier D: `import_private_key` and its siblings)
-          on a configured *custodian*. `signer_probe` imports a key, so it needs
-          the second one — without it the run stops on its very first call with
-          the keystore's uniform refusal, `not authorized`.
+          Nothing here may touch the keystore or the manager until each is told
+          who holds its roles. `signer_manager_module` gates **approval**
+          (`pending`, `acknowledge`, `approve`, `reject`) on a configured
+          *approver* and asks only its configured *signers* to sign.
+          `keystore_module` gates **account mutation** (`import_private_key` and
+          its siblings) on a configured *custodian*, and **signing** on a
+          configured *manager*. `signer_probe` imports a key, so it needs the
+          keystore's custodian role — without it the run stops on its very first
+          call with the keystore's uniform refusal, `not authorized`.
 
-          So `signer_probe` makes one call before anything else, naming both:
+          So `signer_probe` makes two calls before anything else:
 
           ```json
-          keystore_module.configure({"approvers": "evm_signer_ui", "custodians": "signer_probe"})
+          keystore_module.configure({"custodians": "signer_probe", "managers": "signer_manager_module"})
+          signer_manager_module.configure({"approvers": "evm_signer_ui", "custodians": "evm_keystore_ui", "signers": "keystore_module"})
           ```
 
-          **Both roles in the one call, deliberately.** `configure` is *total*,
-          not a patch: the document is the whole answer to who holds these roles,
-          so one it does not name is held by **nobody** — an empty name admits no
-          caller. Naming only the custodian would strip the approver, and Tier A
-          would then refuse `evm_signer_ui` itself, which is the half of this
-          doc-test that matters.
+          **Every role in each call, deliberately.** `configure` is *total*, not
+          a patch: the document is the whole answer to who holds these roles, so
+          one it does not name is held by **nobody** — an empty name admits no
+          caller. Leaving out the manager's approver would refuse `evm_signer_ui`
+          itself, which is the half of this doc-test that matters; leaving out
+          its signers would leave nothing to sign with.
 
           **Who gets which, and why.** The approver stays `evm_signer_ui`: it is the
           subject here, the surface a human reads and clicks, and moving that
-          role anywhere else would leave nothing to test. The custodian is
-          `signer_probe`, because in this staged tree there is no other
+          role anywhere else would leave nothing to test. The keystore's custodian
+          is `signer_probe`, because in this staged tree there is no other
           candidate — production's custodian is `evm_keystore_ui`, which is not
           installed here, and a role naming an absent module admits nobody.
 
@@ -214,10 +229,10 @@ sections:
           production would not: a wallet asks for signatures and reads which
           accounts exist, and never imports a key.
 
-          The call comes from the module rather than a command line because
+          The calls come from the module rather than a command line because
           `logos-standalone-app` has no CLI — and the host anchor a CLI
-          authenticates as is refused by Tier B regardless, which is why
-          `signer_probe` exists at all. It takes effect on the next call;
+          authenticates as is refused by the manager regardless, which is why
+          `signer_probe` exists at all. They take effect on the next call;
           nothing is reloaded.
 
       - title: "Launch, approve, and collect the signature"
@@ -274,10 +289,10 @@ sections:
               texts: ["Refresh"]
               timeout: 20000
 
-            - name: "The keystore parks the request and the UI claims it"
+            - name: "The manager parks the request and the UI claims it"
               # `acknowledge` means 'this approver has it on screen', not 'the human
-              # decided' — the UI claims receipt itself, because the keystore gives
-              # an approver only 3s and gives the human no deadline at all.
+              # decided' — the UI claims receipt itself, because the manager gives
+              # an approver a minute and gives the human no deadline at all.
               action: wait_for
               # The heading carries the section number, and `findByProperty` matches the
               # `text` property EXACTLY — so this is the whole rendered string, as for
@@ -293,10 +308,10 @@ sections:
               timeout: 35000
 
             - name: "The screen is in three sections, and says which is whose"
-              # The keystore returns its lines in two lists and this view keeps them
+              # The manager returns its lines in two lists and this view keeps them
               # apart. probe_sections.qml asserts the separation against a fabricated
               # backend; this asserts the headings a human actually reads, with a real
-              # keystore behind them. Section 1's heading carries the requester's name
+              # manager behind them. Section 1's heading carries the requester's name
               # and so is asserted by the requester line below instead.
               action: wait_for
               texts:
@@ -304,13 +319,13 @@ sections:
                 - "3.  What this signer makes of section 2"
               timeout: 6000
 
-            - name: "The human is shown the keystore's own words, not the requester's"
+            - name: "The human is shown the manager's own words, not the requester's"
               action: wait_for
               texts:
               # EXACT strings. The matcher is findByProperty on `text`, so it is
               # equality, not substring: "Commitment:" never matches the rendered
               # "Commitment: <hex>", and the per-leg lines carry six leading spaces
-              # from the keystore's own formatting. The commitment itself is not
+              # from the manager's own formatting. The commitment itself is not
               # asserted because it changes every run; the leg count and the message
               # text are stable and say as much.
                 - "Account: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
@@ -320,7 +335,7 @@ sections:
               timeout: 6000
 
             - name: "The calldata is decoded on this device, and says so"
-              # The keystore never authored these lines: the backend decoded the
+              # The manager never authored these lines: the backend decoded the
               # `Data:` line above with the linked-in logos-tx-decoder and
               # published them separately. VERIFIED is the strong tier -- the
               # recipient IS the WETH contract on chain 1 in the decoder's own
@@ -399,7 +414,7 @@ sections:
               action: click
               target: "Approve"
 
-            - name: "The keystore signed it, and the surface says so"
+            - name: "The keystore signed it through the manager, and the surface says so"
               # approve() answers with a COUNT, never the signatures: the approver
               # causes them to exist and never sees them. Only the requester can
               # collect them, and only with the receipt it was handed at request
@@ -447,10 +462,12 @@ sections:
         run: |
           set -euo pipefail
           nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' --no-write-lock-file -o result-basecamp
-          nix build 'github:logos-co/logos-evm-keystore-module{release}#install-portable' --no-write-lock-file -o result-keystore-p
+          nix build 'github:logos-co/logos-evm-keystore-module/e4c6fcd39411f0ed52083f0a7fb2701e742f81f1#install-portable' --no-write-lock-file -o result-keystore-p
+          nix build 'github:logos-co/logos-signer-manager-module/67859da29c14e1ffe1da306e0c31fdafb33a0a02#install-portable' --no-write-lock-file -o result-manager-p
           nix build 'github:logos-co/logos-evm-signer-ui{release}#install-portable' --no-write-lock-file -o result-signer-p
           mkdir -p bctree/modules bctree/plugins
           cp -r result-keystore-p/modules/* bctree/modules/
+          cp -r result-manager-p/modules/*  bctree/modules/
           cp -r result-signer-p/plugins/*   bctree/plugins/
           chmod -R u+w bctree
           # Assert the PROPERTY, not one platform's spelling of it. The variant
@@ -466,6 +483,7 @@ sections:
         code_block: |
           nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' --no-write-lock-file -o result-basecamp
           nix build 'github:logos-co/logos-evm-keystore-module#install-portable' --no-write-lock-file -o result-keystore-p
+          nix build 'github:logos-co/logos-signer-manager-module#install-portable' --no-write-lock-file -o result-manager-p
           nix build 'github:logos-co/logos-evm-signer-ui#install-portable' --no-write-lock-file -o result-signer-p
         expect_contains:
           - "PORTABLE VARIANT OK"

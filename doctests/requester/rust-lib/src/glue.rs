@@ -3,9 +3,9 @@
 //! Sequence — this module can ASK but can never APPROVE, and that is the
 //! property under test:
 //!
-//!   1. name both keystore roles              (Tier C, ungated)
-//!   2. import a known private key            (Tier D, custodian only)
-//!   3. request_approval for a message        (Tier B, named modules only)
+//!   1. name the keystore's and the manager's roles (ungated)
+//!   2. import a known private key            (keystore custodian only)
+//!   3. request_approval for a message        (named modules only)
 //!   4. poll approval_status until it settles (Tier B, receipt-gated)
 //!   5. fetch_result, print the signature     (Tier B, receipt-gated)
 //!
@@ -29,19 +29,21 @@ const TEST_KEY: &str = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7b
 const VAULT_PASSWORD: &str = "doctest-pw";
 const MESSAGE: &str = "I authorise the doc-test transfer";
 
-/// Who holds the keystore's two roles here. Each is a LIST; a bare string is the
-/// common single-holder spelling `configure` normalises up. The approver stays `evm_signer_ui` — it is
-/// the surface under test. The custodian is this fixture: `evm_keystore_ui` is not in
-/// this tree, and a role naming a module that is not there admits nobody, so the
-/// key import below would be refused.
-const ROLES: &str = r#"{"approvers":"evm_signer_ui","custodians":"signer_probe"}"#;
+/// Who holds the keystore's roles here. Each is a LIST; a bare string is the common
+/// single-holder spelling `configure` normalises up. The custodian is this fixture:
+/// `evm_keystore_ui` is not in this tree, and a role naming a module that is not there
+/// admits nobody, so the key import below would be refused. Only the manager may ask
+/// the keystore to sign.
+const KEYSTORE_ROLES: &str = r#"{"custodians":"signer_probe","managers":"signer_manager_module"}"#;
+/// The manager's: the approver stays `evm_signer_ui`, the surface under test.
+const MANAGER_ROLES: &str = r#"{"approvers":"evm_signer_ui","custodians":"evm_keystore_ui","signers":"keystore_module"}"#;
 
 /// Printed on stdout so the doc-test can assert on the app log without needing
 /// a CLI — Basecamp has none.
 const MARK: &str = "SIGNER_PROBE";
 
 /// What a requester tells the user when an offer expires unacknowledged. The
-/// keystore's `expired_no_ack` is a protocol fact; this is the human sentence
+/// manager's `expired_no_ack` is a protocol fact; this is the human sentence
 /// it means. Signing requires the Signer to be open — that is the design, not
 /// a limitation to apologise for — so the guidance is simply to open it.
 const NEEDS_APPROVER_MESSAGE: &str =
@@ -81,17 +83,18 @@ fn drive(state: Shared) {
     // Let the host finish wiring before the first outbound call.
     std::thread::sleep(Duration::from_millis(1500));
 
-    // 1. Tier C — name BOTH roles, because configure() is total: a role the
-    // document does not name is held by nobody, so naming only the custodian
-    // would empty the approver and Tier A would then refuse evm_signer_ui itself.
-    if let Err(e) = ok_value(modules().keystore_module.configure(ROLES)) {
+    // 1. Name every role, because configure() is total: a role the document does not
+    // name is held by nobody, so leaving out the approver would refuse evm_signer_ui itself.
+    let configured = ok_value(modules().keystore_module.configure(KEYSTORE_ROLES))
+        .and_then(|_| ok_value(modules().signer_manager_module.configure(MANAGER_ROLES)));
+    if let Err(e) = configured {
         println!("{MARK}_ERROR: configure failed: {e}");
         set!(json!({ "ok": false, "state": "configure_failed", "error": e }));
         return;
     }
-    println!("{MARK}_ROLES: {ROLES}");
+    println!("{MARK}_ROLES: {KEYSTORE_ROLES} {MANAGER_ROLES}");
 
-    // 2. Tier D — admitted only because the call above named this module custodian.
+    // 2. Admitted only because the call above named this module the keystore's custodian.
     let address = match ok_value(modules().keystore_module.import_private_key(TEST_KEY, VAULT_PASSWORD)) {
         Ok(v) => v.get("address").and_then(Value::as_str).unwrap_or_default().to_string(),
         Err(e) => {
@@ -104,8 +107,8 @@ fn drive(state: Shared) {
 
     // 3/4/5. Ask, wait, collect — and RE-ASK if nobody was listening.
     //
-    // The keystore gives an approver ACK_DEADLINE (3 s) to acknowledge an
-    // offer; an offer nobody claims settles as `expired_no_ack`. That is
+    // The manager gives an approver a minute to acknowledge an offer; an
+    // offer nobody claims settles as `expired_no_ack`. That is
     // deliberate — it tells a requester quickly that no approver is present,
     // instead of parking a signature request forever — but it means a request
     // only survives if the signer UI is ALREADY open and polling. So a real
@@ -149,7 +152,7 @@ fn drive(state: Shared) {
     let mut announced = false;
     let mut needs_approver = false;
     for _ in 0..600 {
-        let (handle, receipt) = match ok_value(modules().keystore_module.request_approval(&intent)) {
+        let (handle, receipt) = match ok_value(modules().signer_manager_module.request_approval(&intent)) {
             Ok(v) => (
                 v.get("handle").and_then(Value::as_str).unwrap_or_default().to_string(),
                 v.get("receipt").and_then(Value::as_str).unwrap_or_default().to_string(),
@@ -173,7 +176,7 @@ fn drive(state: Shared) {
         let mut outcome = String::new();
         for _ in 0..600 {
             std::thread::sleep(Duration::from_millis(250));
-            let v = match ok_value(modules().keystore_module.approval_status(&handle, &receipt)) {
+            let v = match ok_value(modules().signer_manager_module.approval_status(&handle, &receipt)) {
                 Ok(v) => v,
                 Err(_) => continue,
             };
@@ -199,7 +202,7 @@ fn drive(state: Shared) {
                 "ok": true,
                 "state": "waiting_for_approver",
                 "address": address,
-                // What a real requester's UI binds to. The keystore reports
+                // What a real requester's UI binds to. The manager reports
                 // `expired_no_ack`; turning that into something a human can act
                 // on is the requester's job, not the signer's.
                 "needs_approver": true,
@@ -216,14 +219,14 @@ fn drive(state: Shared) {
         // Approved. The RECEIPT authorises collection, not the caller name — a
         // module that merely learned the handle from the event plane cannot
         // reach this.
-        match ok_value(modules().keystore_module.fetch_result(&handle, &receipt)) {
+        match ok_value(modules().signer_manager_module.fetch_result(&handle, &receipt)) {
             Ok(v) => {
                 let signed = v.get("signed").cloned().unwrap_or(Value::Null);
                 let first = signed.get(0).and_then(Value::as_str).unwrap_or("").to_string();
                 println!("{MARK}_SIGNED: {first}");
                 set!(json!({ "ok": true, "state": "signed", "address": address,
                              "handle": handle, "signed": signed }));
-                let _ = modules().keystore_module.ack_result(&handle, &receipt);
+                let _ = modules().signer_manager_module.ack_result(&handle, &receipt);
             }
             Err(e) => {
                 println!("{MARK}_ERROR: fetch_result failed: {e}");

@@ -17792,17 +17792,17 @@
         "logos-signer-interface": "logos-signer-interface"
       },
       "locked": {
-        "lastModified": 1791616246,
-        "narHash": "sha256-R4ItaWDne0sgn0jqTKYtzBUA4A096pN3SAFlQdKAitY=",
+        "lastModified": 1791618911,
+        "narHash": "sha256-rEyxCghK+uIEPO19qFmqUrk9ZTIt3G4IN9hzQGglChY=",
         "owner": "logos-co",
         "repo": "logos-signer-manager-module",
-        "rev": "0342cbcd43596b91fa1bda8c1fa3feccf09ef635",
+        "rev": "1a385f4e41ef54f388a192037bd9d9aa7165a505",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
         "repo": "logos-signer-manager-module",
-        "rev": "0342cbcd43596b91fa1bda8c1fa3feccf09ef635",
+        "rev": "1a385f4e41ef54f388a192037bd9d9aa7165a505",
         "type": "github"
       }
     },

@@ -7,7 +7,7 @@
   "interface": "cdylib",
   "category": "test",
   "main": "signer_probe_plugin",
-  "dependencies": ["keystore_module", "signer_manager_module"],
+  "dependencies": ["keystore_module", "signer_manager_module", "mock_device_signer"],
   "include": [],
   "capabilities": [],
   "codegen": {

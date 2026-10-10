@@ -359,6 +359,16 @@ Item {
                 wrapMode: Text.Wrap
             }
 
+            LogosText {
+                objectName: "deviceWaiting"
+                visible: root.showing && backend.renderedSigning === true
+                Layout.fillWidth: true
+                text: "Approved here. Now confirm on the device: this request stays until it answers."
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                color: Theme.palette.textSecondary
+            }
+
             LogosTextField {
                 id: pw
                 // Addressable by name: the doc-test harness locates fields with
@@ -430,6 +440,7 @@ Item {
                     // cannot shorten it; the backend refuses early approvals
                     // regardless of what the view believes.
                     enabled: root.ready && backend.dwellElapsed && (!root.needsSecret || pw.text.length > 0)
+                             && backend.renderedSigning !== true
                     text: backend.dwellElapsed ? "Approve" : "Reading…"
                     onClicked: {
                         backend.approve(backend.renderedHandle, backend.renderedBundleId,

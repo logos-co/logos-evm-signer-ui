@@ -9,7 +9,8 @@
 //!   4. poll approval_status until it settles (Tier B, receipt-gated)
 //!   5. fetch_result, print the signature     (Tier B, receipt-gated)
 //!
-//! Then the same again inside an unlock, and two Bitcoin sends (`bitcoin_rounds`).
+//! Then the same again inside an unlock, two Bitcoin sends (`bitcoin_rounds`), and a signature
+//! from a device (`device_round`).
 //!
 //! Nothing here can reach `approve()`. The signature this prints exists only
 //! because a human typed the vault password into the signer UI.
@@ -42,9 +43,9 @@ const BTC_PASSWORD: &str = "btc-pw";
 /// the keystore to sign.
 const KEYSTORE_ROLES: &str = r#"{"custodians":"signer_probe","managers":"signer_manager_module"}"#;
 /// The manager's: the approver stays `evm_signer_ui`, the surface under test. This fixture is also
-/// its custodian, playing the keys app for the unlock in the second round.
-const MANAGER_ROLES: &str =
-    r#"{"approvers":"evm_signer_ui","custodians":["evm_keystore_ui","signer_probe"],"signers":"keystore_module"}"#;
+/// its custodian, playing the keys app for the unlock in the second round. Its signers are the
+/// keystore and a mock device.
+const MANAGER_ROLES: &str = r#"{"approvers":"evm_signer_ui","custodians":["evm_keystore_ui","signer_probe"],"signers":["keystore_module","mock_device_signer"]}"#;
 
 /// Printed on stdout so the doc-test can assert on the app log without needing
 /// a CLI — Basecamp has none.
@@ -205,6 +206,63 @@ fn bitcoin_rounds() -> Result<(), String> {
     Ok(())
 }
 
+/// A signature from the mock device's EVM account. The Signer approves with nothing typed; the
+/// device waits for its button, which this fixture presses once the request is `signing`.
+fn device_round() -> Result<String, String> {
+    std::thread::sleep(Duration::from_secs(8));
+    let listed = ok_value(modules().signer_manager_module.accounts())?;
+    let address = listed
+        .get("accounts")
+        .and_then(Value::as_array)
+        .and_then(|a| {
+            a.iter().find(|x| {
+                x.get("signer").and_then(Value::as_str) == Some("mock_device_signer")
+                    && x.get("family").and_then(Value::as_str) == Some("evm")
+            })
+        })
+        .and_then(|x| x.get("id").and_then(Value::as_str))
+        .ok_or("the manager lists no device account")?
+        .to_string();
+    let intent = json!({ "address": address, "purpose": "Doc-test: sign on a device",
+                         "legs": [{ "kind": "message", "text": "Signed on the device" }] });
+    let v = ok_value(modules().signer_manager_module.request_approval(&intent.to_string()))?;
+    let field = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+    let (handle, receipt) = (field("handle"), field("receipt"));
+    println!("{MARK}_REQUESTED_DEVICE: {handle}");
+    let mut pressed = false;
+    for _ in 0..600 {
+        std::thread::sleep(Duration::from_millis(250));
+        let Ok(v) = ok_value(modules().signer_manager_module.approval_status(&handle, &receipt)) else { continue };
+        match v.get("state").and_then(Value::as_str) {
+            // The person approved in the Signer; a moment later they confirm on the device.
+            Some("signing") if !pressed => {
+                std::thread::sleep(Duration::from_secs(2));
+                let screen = ok_value(modules().mock_device_signer.screen())?;
+                let job = screen
+                    .get("waiting")
+                    .and_then(|w| w.get(0))
+                    .and_then(|j| j.get("job"))
+                    .and_then(Value::as_str)
+                    .ok_or("nothing on the device's screen")?
+                    .to_string();
+                ok_value(modules().mock_device_signer.press(&job, "confirm"))?;
+                pressed = true;
+            }
+            Some("settled") => {
+                let reason = v.get("reason").and_then(Value::as_str).unwrap_or("").to_string();
+                if reason != "approved" {
+                    return Err(reason);
+                }
+                let f = ok_value(modules().signer_manager_module.fetch_result(&handle, &receipt))?;
+                let _ = modules().signer_manager_module.ack_result(&handle, &receipt);
+                return Ok(f.get("signed").and_then(|s| s.get(0)).and_then(Value::as_str).unwrap_or("").to_string());
+            }
+            _ => {}
+        }
+    }
+    Err("nobody decided the device request".into())
+}
+
 fn drive(state: Shared) {
     macro_rules! set { ($v:expr) => { *state.lock().unwrap() = $v; } }
 
@@ -361,6 +419,10 @@ fn drive(state: Shared) {
                 }
                 if let Err(e) = bitcoin_rounds() {
                     println!("{MARK}_ERROR: Bitcoin rounds: {e}");
+                }
+                match device_round() {
+                    Ok(sig) => println!("{MARK}_DEVICE_SIGNED: {sig}"),
+                    Err(e) => println!("{MARK}_ERROR: device round: {e}"),
                 }
             }
             Err(e) => {

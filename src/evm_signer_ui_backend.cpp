@@ -310,7 +310,8 @@ void EvmSignerUiBackend::refresh()
     // for is the one they never see. It holds the LINE only: a request that
     // arrives meanwhile is claimed below, and ends the hold.
     const bool holding = m_confirmUntil.isValid() && QDateTime::currentDateTimeUtc() < m_confirmUntil;
-    if (!holding) {
+    // While a device waits for its person, its line stays until the manager settles the request.
+    if (!holding && !renderedSigning()) {
         setStatusText(items.isEmpty() ? QStringLiteral("Nothing to approve")
                                       : QStringLiteral("%1 waiting").arg(items.size()));
     }
@@ -401,6 +402,7 @@ bool EvmSignerUiBackend::approve(QString handle, QString bundleId, QString passw
     const bool ok = r.value(QStringLiteral("ok")).toBool();
     if (ok && r.value(QStringLiteral("state")).toString() == QStringLiteral("signing")) {
         // A device signs in its own time; the manager's settled event ends the sheet.
+        setRenderedSigning(true);
         setStatusText(QStringLiteral("Confirm on the signing device"));
         return true;
     }
@@ -470,6 +472,7 @@ void EvmSignerUiBackend::clearRendered()
     setRenderedCollects(QString());
     setRenderedUnlocked(false);
     setRenderedAccount(QString());
+    setRenderedSigning(false);
     setClaimLines(QStringList());
     setRenderLines(QStringList());
     setClaimLines(QStringList());

@@ -81,8 +81,9 @@ password`, `— confirm on the device when it asks`, or `— asks for the card's
 The password field shows only when a secret is needed, and Approve then sends an empty one. The
 manager decides: an approval with no secret signs only inside an unlock that still covers the
 requester, so a stale view cannot sign anything the person did not unlock. An approval a device
-is still working on keeps the sheet up, reading "Confirm on the signing device", until the
-manager settles it.
+is still working on keeps the sheet up, reading "Confirm on the signing device", with Approve
+disabled and a line saying the request stays until the device answers. The manager's settle
+event ends it.
 
 What was signed **without** being shown — inside an unlock the person granted that way, for
 named apps only — is listed under "Signed without asking", refreshed when the manager announces

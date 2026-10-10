@@ -21,6 +21,9 @@ intro: |
   5. The password is typed into the UI and Approve is clicked; the manager has the
      keystore sign and checks the signatures.
   6. The requester collects a real secp256k1 signature with its receipt.
+  7. `signer_probe`, playing the keys app, unlocks the account for its own requests, each
+     signature confirmed, and asks again: the signer says the account is unlocked, shows no
+     password field, and the approval needs nothing typed.
 
   Every refusal on the way is asserted too, because they are the design: the
   requester can ask and collect but can never approve, and nothing signs until
@@ -89,7 +92,7 @@ sections:
         check_file: "result-keystore/modules"
 
       - title: "Build the signer manager"
-        run: "nix build 'github:logos-co/logos-signer-manager-module/67859da29c14e1ffe1da306e0c31fdafb33a0a02#install' --no-write-lock-file -o result-manager"
+        run: "nix build 'github:logos-co/logos-signer-manager-module/0342cbcd43596b91fa1bda8c1fa3feccf09ef635#install' --no-write-lock-file -o result-manager"
         code_block: "nix build 'github:logos-co/logos-signer-manager-module#install' --no-write-lock-file -o result-manager"
 
       - title: "The signer manager really produced modules"
@@ -205,7 +208,7 @@ sections:
 
           ```json
           keystore_module.configure({"custodians": "signer_probe", "managers": "signer_manager_module"})
-          signer_manager_module.configure({"approvers": "evm_signer_ui", "custodians": "evm_keystore_ui", "signers": "keystore_module"})
+          signer_manager_module.configure({"approvers": "evm_signer_ui", "custodians": ["evm_keystore_ui", "signer_probe"], "signers": "keystore_module"})
           ```
 
           **Every role in each call, deliberately.** `configure` is *total*, not
@@ -236,10 +239,8 @@ sections:
           nothing is reloaded.
 
       - title: "Launch, approve, and collect the signature"
-        # Timeouts below must SUM to well under 120s: the runner caps the whole
-        # UI driver with run_cmd(..., timeout=120), so blowing that budget kills
-        # the driver mid-sequence instead of failing a named step. Locally the
-        # whole flow completes in about 15s, so these are already generous.
+        # The runner gives the UI driver 120s plus every step's own timeout, so each
+        # timeout below bounds its step, not the whole run.
         #
         # The two environment variables are set inline, not as a separate `env:`
         # block, because the runner does not carry one — and neither is optional:
@@ -435,6 +436,108 @@ sections:
               timeout: 5000
               screenshot: "evm-signer-ui-approved.png"
 
+            - name: "Unlocked for this app: the signer says so, in the CLI's words"
+              # The probe, playing the keys app as the manager's custodian, unlocked the account
+              # for its own requests with each signature confirmed, and asked again.
+              action: wait_for
+              texts: ["Signer: keystore_module — this account is unlocked: no password"]
+              timeout: 20000
+
+            - name: "No password field while unlocked"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "vaultPasswordField"
+              property: "visible"
+              value: false
+
+            - name: "Approve arms after the dwell, with nothing typed"
+              action: wait_for
+              texts: ["Approve"]
+              timeout: 5000
+
+            - name: "Approve, unlocked"
+              action: click
+              target: "Approve"
+
+            - name: "Signed inside the unlock"
+              action: wait_for
+              texts: ["Approved — 1 item signed"]
+              timeout: 20000
+              screenshot: "evm-signer-ui-unlocked.png"
+
+            - name: "A Bitcoin send, as the manager reads the PSBT"
+              # The probe imports the test phrase as a regtest wallet and asks for a 60,000-sat
+              # send with 39,000 back as change. The PSBT is built offline and never broadcast.
+              action: wait_for
+              texts:
+                - "Purpose (claimed by the requester): Doc-test: a regtest send"
+                - "  [1] Bitcoin regtest · wallet \"Regtest wallet\", native segwit, account 0"
+                - "      Send 0.00060000 BTC to bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+                - "      Change 0.00039000 BTC back to this wallet (m/84'/1'/0'/1/0, checked)"
+                - "      Fee 1,000 sats, about 7.1 sat/vB, computed from the inputs"
+                - "Signer: keystore_module — asks for the account's password"
+              timeout: 30000
+              screenshot: "evm-signer-ui-bitcoin.png"
+
+            - name: "Type the wallet's password"
+              action: set_text
+              find_by: "objectName"
+              find_value: "vaultPasswordField"
+              value: "btc-pw"
+
+            - name: "Approve arms after the dwell, for the send"
+              action: wait_for
+              texts: ["Approve"]
+              timeout: 5000
+
+            - name: "Approve the send"
+              action: click
+              target: "Approve"
+
+            - name: "Signed: the app unlocks the wallet and asks again"
+              # The status line reads as it did after the last round, so wait on the next
+              # request, which the probe makes only once it holds the signed PSBT.
+              action: wait_for
+              texts:
+                - "Purpose (claimed by the requester): Doc-test: a regtest send, unlocked"
+                - "Signer: keystore_module — this account is unlocked: no password"
+              timeout: 30000
+
+            - name: "No password field for the unlocked wallet"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "vaultPasswordField"
+              property: "visible"
+              value: false
+
+            - name: "Approve arms after the dwell, for the unlocked send"
+              action: wait_for
+              texts: ["Approve"]
+              timeout: 5000
+
+            - name: "Approve the unlocked send"
+              action: click
+              target: "Approve"
+
+            - name: "The queue is empty after the unlocked send"
+              action: wait_for
+              texts: ["No signing requests are waiting."]
+              timeout: 20000
+
+            - name: "Let the probe collect it"
+              # It polls every 250 ms; the app is stopped as soon as this list ends.
+              action: sleep
+              ms: 2000
+
+      - title: "What the probe collected from the Bitcoin sends"
+        text: |
+          Each PSBT came back with its one input signed: once with the wallet's password, once
+          inside the unlock.
+        run: "grep -h 'SIGNER_PROBE_PSBT' ui-test-app.log"
+        expect_contains:
+          - "SIGNER_PROBE_PSBT_SIGNED: 1"
+          - "SIGNER_PROBE_PSBT_SIGNED_UNLOCKED: 1"
+
 
 
   - title: "The same plugin inside Basecamp"
@@ -463,7 +566,7 @@ sections:
           set -euo pipefail
           nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' --no-write-lock-file -o result-basecamp
           nix build 'github:logos-co/logos-evm-keystore-module/e4c6fcd39411f0ed52083f0a7fb2701e742f81f1#install-portable' --no-write-lock-file -o result-keystore-p
-          nix build 'github:logos-co/logos-signer-manager-module/67859da29c14e1ffe1da306e0c31fdafb33a0a02#install-portable' --no-write-lock-file -o result-manager-p
+          nix build 'github:logos-co/logos-signer-manager-module/0342cbcd43596b91fa1bda8c1fa3feccf09ef635#install-portable' --no-write-lock-file -o result-manager-p
           nix build 'github:logos-co/logos-evm-signer-ui{release}#install-portable' --no-write-lock-file -o result-signer-p
           mkdir -p bctree/modules bctree/plugins
           cp -r result-keystore-p/modules/* bctree/modules/

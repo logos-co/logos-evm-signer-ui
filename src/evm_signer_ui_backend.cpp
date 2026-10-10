@@ -243,10 +243,24 @@ void EvmSignerUiBackend::onContextReady()
         emit settled(handle, state);
         refreshSoon();
     });
+    // Signed unseen, inside an unlock the person granted that way: re-read the list, off the IPC stack.
+    modules().signer_manager_module.onSigned_without_asking([this](QString) {
+        QTimer::singleShot(0, this, [this] { refreshUnattended(); });
+    });
 
     m_poll.start(kPollMs);
     refresh();
+    refreshUnattended();
     setStatusText(QStringLiteral("Ready"));
+}
+
+void EvmSignerUiBackend::refreshUnattended()
+{
+    const QJsonObject reply = parseObject(modules().signer_manager_module.unattended_signatures());
+    if (reply.value(QStringLiteral("ok")).toBool()) {
+        const QJsonArray signedUnseen = reply.value(QStringLiteral("signed")).toArray();
+        setUnattendedJson(QString::fromUtf8(QJsonDocument(signedUnseen).toJson(QJsonDocument::Compact)));
+    }
 }
 
 void EvmSignerUiBackend::refreshSoon()
@@ -293,12 +307,13 @@ void EvmSignerUiBackend::refresh()
     // A confirmation outlives the next poll. Without this the "Approved — …"
     // line survives for under a second before the 1s queue poll overwrites it
     // with "Nothing to approve", so the one message the human actually waited
-    // for is the one they never see.
-    if (m_confirmUntil.isValid() && QDateTime::currentDateTimeUtc() < m_confirmUntil) {
-        return;
+    // for is the one they never see. It holds the LINE only: a request that
+    // arrives meanwhile is claimed below, and ends the hold.
+    const bool holding = m_confirmUntil.isValid() && QDateTime::currentDateTimeUtc() < m_confirmUntil;
+    if (!holding) {
+        setStatusText(items.isEmpty() ? QStringLiteral("Nothing to approve")
+                                      : QStringLiteral("%1 waiting").arg(items.size()));
     }
-    setStatusText(items.isEmpty() ? QStringLiteral("Nothing to approve")
-                                  : QStringLiteral("%1 waiting").arg(items.size()));
 
     // Acknowledge receipt automatically.
     //
@@ -316,8 +331,9 @@ void EvmSignerUiBackend::refresh()
     if (renderedHandle().isEmpty() && !items.isEmpty()) {
         const QString next = items.first().toObject()
                                   .value(QStringLiteral("handle")).toString();
-        if (!next.isEmpty()) {
-            acknowledge(next);
+        if (!next.isEmpty() && acknowledge(next) && holding) {
+            m_confirmUntil = QDateTime();
+            setStatusText(QStringLiteral("%1 waiting").arg(items.size()));
         }
     }
 }
@@ -351,6 +367,9 @@ bool EvmSignerUiBackend::acknowledge(QString handle)
     setLastError(QString());
     setClaimLines(claims);
     setRenderedRequester(r.value(QStringLiteral("requester")).toString());
+    setRenderedSigner(r.value(QStringLiteral("signer")).toString());
+    setRenderedCollects(r.value(QStringLiteral("collects")).toString());
+    setRenderedUnlocked(r.value(QStringLiteral("unlocked")).toBool());
     setRenderedBundleId(r.value(QStringLiteral("bundle_id")).toString());
     setClaimLines(claims);
     setRenderLines(lines);
@@ -446,6 +465,9 @@ void EvmSignerUiBackend::clearRendered()
     setRenderedHandle(QString());
     setRenderedBundleId(QString());
     setRenderedRequester(QString());
+    setRenderedSigner(QString());
+    setRenderedCollects(QString());
+    setRenderedUnlocked(false);
     setClaimLines(QStringList());
     setRenderLines(QStringList());
     setClaimLines(QStringList());

@@ -102,6 +102,10 @@ Item {
         property string renderedHandle: ""
         property string renderedBundleId: ""
         property string renderedRequester: ""
+        property string renderedSigner: ""
+        property string renderedCollects: ""
+        property bool renderedUnlocked: false
+        property string unattendedJson: "[]"
         property var claimLines: []
         property var renderLines: []
         property var interpretationLines: []

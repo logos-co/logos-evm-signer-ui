@@ -70,6 +70,24 @@ This defends against a click already in flight when the sheet appeared. It is
 running inside the shell process can wait 500 ms. Stated here rather than
 implied.
 
+## Who signs, and what approving takes
+
+`acknowledge` names the account's signer, what it asks for (`password`, `pin`, or `nothing` for a
+device that asks the person itself) and whether an unlock covers the request. The sheet says so
+in one line, in the words `evm_signer_cli` uses, so one request reads alike on both:
+`Signer: keystore_module — asks for the account's password`, `— this account is unlocked: no
+password`, `— confirm on the device when it asks`, or `— asks for the card's PIN`.
+
+The password field shows only when a secret is needed, and Approve then sends an empty one. The
+manager decides: an approval with no secret signs only inside an unlock that still covers the
+requester, so a stale view cannot sign anything the person did not unlock. An approval a device
+is still working on keeps the sheet up, reading "Confirm on the signing device", until the
+manager settles it.
+
+What was signed **without** being shown — inside an unlock the person granted that way, for
+named apps only — is listed under "Signed without asking", refreshed when the manager announces
+one.
+
 ## What the backend must never do
 
 Persist the password, log it, place it in a PROP, or emit it in an event. It

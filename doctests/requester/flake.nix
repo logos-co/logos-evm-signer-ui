@@ -9,7 +9,7 @@
       inputs.logos-module-builder.follows = "logos-module-builder";
     };
     signer_manager_module = {
-      url = "github:logos-co/logos-signer-manager-module/67859da29c14e1ffe1da306e0c31fdafb33a0a02";
+      url = "github:logos-co/logos-signer-manager-module/0342cbcd43596b91fa1bda8c1fa3feccf09ef635";
       inputs.logos-module-builder.follows = "logos-module-builder";
       inputs.keystore_module.follows = "keystore_module";
     };

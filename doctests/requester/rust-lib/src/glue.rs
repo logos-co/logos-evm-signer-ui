@@ -9,6 +9,8 @@
 //!   4. poll approval_status until it settles (Tier B, receipt-gated)
 //!   5. fetch_result, print the signature     (Tier B, receipt-gated)
 //!
+//! Then the same again inside an unlock, and two Bitcoin sends (`bitcoin_rounds`).
+//!
 //! Nothing here can reach `approve()`. The signature this prints exists only
 //! because a human typed the vault password into the signer UI.
 //!
@@ -18,6 +20,7 @@
 //! worker thread is supported.
 
 use serde_json::{json, Value};
+use std::str::FromStr;
 use std::time::Duration;
 
 /// Fully qualified rather than imported: the generated scaffold is `include!`d
@@ -28,6 +31,9 @@ type Shared = std::sync::Arc<std::sync::Mutex<Value>>;
 const TEST_KEY: &str = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const VAULT_PASSWORD: &str = "doctest-pw";
 const MESSAGE: &str = "I authorise the doc-test transfer";
+/// Foundry's test phrase, imported as a regtest Bitcoin wallet for the Bitcoin rounds.
+const PHRASE: &str = "test test test test test test test test test test test junk";
+const BTC_PASSWORD: &str = "btc-pw";
 
 /// Who holds the keystore's roles here. Each is a LIST; a bare string is the common
 /// single-holder spelling `configure` normalises up. The custodian is this fixture:
@@ -35,8 +41,10 @@ const MESSAGE: &str = "I authorise the doc-test transfer";
 /// admits nobody, so the key import below would be refused. Only the manager may ask
 /// the keystore to sign.
 const KEYSTORE_ROLES: &str = r#"{"custodians":"signer_probe","managers":"signer_manager_module"}"#;
-/// The manager's: the approver stays `evm_signer_ui`, the surface under test.
-const MANAGER_ROLES: &str = r#"{"approvers":"evm_signer_ui","custodians":"evm_keystore_ui","signers":"keystore_module"}"#;
+/// The manager's: the approver stays `evm_signer_ui`, the surface under test. This fixture is also
+/// its custodian, playing the keys app for the unlock in the second round.
+const MANAGER_ROLES: &str =
+    r#"{"approvers":"evm_signer_ui","custodians":["evm_keystore_ui","signer_probe"],"signers":"keystore_module"}"#;
 
 /// Printed on stdout so the doc-test can assert on the app log without needing
 /// a CLI — Basecamp has none.
@@ -75,6 +83,126 @@ fn ok_value(reply: Result<String, impl std::fmt::Debug>) -> Result<Value, String
             .unwrap_or("call failed")
             .to_string())
     }
+}
+
+/// Ask, wait until the person decides, and collect what was signed. `marker` names the request
+/// in the log.
+fn ask_and_collect(intent: &Value, marker: &str) -> Result<Value, String> {
+    let v = ok_value(modules().signer_manager_module.request_approval(&intent.to_string()))?;
+    let field = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+    let (handle, receipt) = (field("handle"), field("receipt"));
+    println!("{MARK}_{marker}: {handle}");
+    for _ in 0..600 {
+        std::thread::sleep(Duration::from_millis(250));
+        let Ok(v) = ok_value(modules().signer_manager_module.approval_status(&handle, &receipt)) else { continue };
+        if matches!(v.get("state").and_then(Value::as_str), Some("offered" | "rendered" | "signing")) {
+            continue;
+        }
+        let reason = v.get("reason").and_then(Value::as_str).unwrap_or("").to_string();
+        if reason != "approved" {
+            return Err(reason);
+        }
+        let f = ok_value(modules().signer_manager_module.fetch_result(&handle, &receipt))?;
+        let _ = modules().signer_manager_module.ack_result(&handle, &receipt);
+        return Ok(f.get("signed").cloned().unwrap_or(Value::Null));
+    }
+    Err(format!("nobody decided {marker}"))
+}
+
+/// The second round: the account unlocked for this module, each signature confirmed, so the
+/// signer approves with no password. Signs once and collects the signature.
+fn unlocked_round(address: &str) -> Result<String, String> {
+    // After the doc-test has seen the queue empty: a request arriving at once replaces that line.
+    std::thread::sleep(Duration::from_secs(8));
+    let terms = json!({ "account": address, "password": VAULT_PASSWORD, "count": 1,
+                        "apps": ["signer_probe"], "confirm": true });
+    ok_value(modules().signer_manager_module.unlock(&terms.to_string()))?;
+    // No form of the word the doc-test clicks by text, as in the first round.
+    let intent = json!({ "address": address, "purpose": "Doc-test: sign again, unlocked",
+                         "legs": [{ "kind": "message", "text": "Unlocked for one signature" }] });
+    let signed = ask_and_collect(&intent, "REQUESTED_UNLOCKED")?;
+    Ok(signed.get(0).and_then(Value::as_str).unwrap_or("").to_string())
+}
+
+/// A PSBT spending the wallet's first receive coin to a stranger, change to its first change key.
+/// The funding is made up and nothing is broadcast.
+fn psbt_for(xpub: &str, fingerprint: &str) -> Result<String, String> {
+    use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub};
+    use bitcoin::{absolute::LockTime, transaction::Version};
+    use bitcoin::{Address, Amount, CompressedPublicKey, Network, OutPoint, Psbt, ScriptBuf, Sequence};
+    use bitcoin::{Transaction, TxIn, TxOut, Txid, Witness};
+    let e = |e: &dyn std::fmt::Display| e.to_string();
+    let secp = bitcoin::secp256k1::Secp256k1::verification_only();
+    let account = Xpub::from_str(xpub).map_err(|x| e(&x))?;
+    let fp = Fingerprint::from_str(fingerprint).map_err(|x| e(&x))?;
+    let key = |change: u32| -> Result<CompressedPublicKey, String> {
+        let path = [ChildNumber::Normal { index: change }, ChildNumber::Normal { index: 0 }];
+        Ok(CompressedPublicKey(account.derive_pub(&secp, &path).map_err(|x| e(&x))?.public_key))
+    };
+    let (receive, change) = (key(0)?, key(1)?);
+    let input = |txid: Txid, sequence: Sequence| TxIn {
+        previous_output: OutPoint { txid, vout: 0 },
+        script_sig: ScriptBuf::new(),
+        sequence,
+        witness: Witness::new(),
+    };
+    let funding = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![input(Txid::from_str(&"11".repeat(32)).map_err(|x| e(&x))?, Sequence::MAX)],
+        output: vec![TxOut { value: Amount::from_sat(100_000), script_pubkey: ScriptBuf::new_p2wpkh(&receive.wpubkey_hash()) }],
+    };
+    // Not this wallet's: the key of secret 1, the generator point.
+    let theirs = CompressedPublicKey::from_str("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+        .map_err(|x| e(&x))?;
+    let spend = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![input(funding.compute_txid(), Sequence::ENABLE_RBF_NO_LOCKTIME)],
+        output: vec![
+            TxOut { value: Amount::from_sat(60_000), script_pubkey: Address::p2wpkh(&theirs, Network::Regtest).script_pubkey() },
+            TxOut { value: Amount::from_sat(39_000), script_pubkey: ScriptBuf::new_p2wpkh(&change.wpubkey_hash()) },
+        ],
+    };
+    let mut psbt = Psbt::from_unsigned_tx(spend).map_err(|x| e(&x))?;
+    let path = |c: u32| DerivationPath::from_str(&format!("m/84'/1'/0'/{c}/0")).map_err(|x| e(&x));
+    psbt.inputs[0].witness_utxo = Some(funding.output[0].clone());
+    psbt.inputs[0].non_witness_utxo = Some(funding);
+    psbt.inputs[0].bip32_derivation.insert(receive.0, (fp, path(0)?));
+    psbt.outputs[1].bip32_derivation.insert(change.0, (fp, path(1)?));
+    Ok(psbt.to_string())
+}
+
+/// How many signatures a signed PSBT carries, or `None` for anything else.
+fn psbt_signatures(item: &Value) -> Option<usize> {
+    let psbt = bitcoin::Psbt::from_str(item.as_str()?).ok()?;
+    Some(psbt.inputs.iter().map(|i| i.partial_sigs.len() + usize::from(i.tap_key_sig.is_some())).sum())
+}
+
+/// The Bitcoin rounds: the test phrase as a regtest wallet, then one send approved with the
+/// wallet's password and one inside a confirmed unlock. Prints each PSBT's signature count.
+fn bitcoin_rounds() -> Result<(), String> {
+    std::thread::sleep(Duration::from_secs(8));
+    let p = json!({ "phrase": PHRASE, "family": "bitcoin", "chain": "test", "password": BTC_PASSWORD,
+                    "label": "Regtest wallet" });
+    let v = ok_value(modules().keystore_module.import_bitcoin(&p.to_string()))?;
+    let text = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+    // The account xpub, read off the receive descriptor: wpkh([fp/84'/1'/0']tpub…/0/*)#sum.
+    let external = text("external");
+    let xpub = external.split(']').nth(1).and_then(|r| r.split('/').next()).unwrap_or_default();
+    let (group, psbt) = (text("group"), psbt_for(xpub, &text("fingerprint"))?);
+    let send = |purpose: &str, marker: &str| -> Result<usize, String> {
+        let intent = json!({ "group": group, "purpose": purpose,
+                             "legs": [{ "kind": "psbt", "network": "regtest", "psbt": psbt }] });
+        ask_and_collect(&intent, marker)?.get(0).and_then(psbt_signatures).ok_or("no signed PSBT".into())
+    };
+    println!("{MARK}_PSBT_SIGNED: {}", send("Doc-test: a regtest send", "REQUESTED_PSBT")?);
+    std::thread::sleep(Duration::from_secs(8));
+    let terms = json!({ "account": group, "password": BTC_PASSWORD, "count": 1,
+                        "apps": ["signer_probe"], "confirm": true });
+    ok_value(modules().signer_manager_module.unlock(&terms.to_string()))?;
+    println!("{MARK}_PSBT_SIGNED_UNLOCKED: {}", send("Doc-test: a regtest send, unlocked", "REQUESTED_PSBT_UNLOCKED")?);
+    Ok(())
 }
 
 fn drive(state: Shared) {
@@ -227,6 +355,13 @@ fn drive(state: Shared) {
                 set!(json!({ "ok": true, "state": "signed", "address": address,
                              "handle": handle, "signed": signed }));
                 let _ = modules().signer_manager_module.ack_result(&handle, &receipt);
+                match unlocked_round(&address) {
+                    Ok(sig) => println!("{MARK}_SIGNED_UNLOCKED: {sig}"),
+                    Err(e) => println!("{MARK}_ERROR: unlocked round: {e}"),
+                }
+                if let Err(e) = bitcoin_rounds() {
+                    println!("{MARK}_ERROR: Bitcoin rounds: {e}");
+                }
             }
             Err(e) => {
                 println!("{MARK}_ERROR: fetch_result failed: {e}");

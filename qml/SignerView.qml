@@ -90,6 +90,24 @@ Item {
             var approved = state === "approved"
             root.answerIntent(handle, approved, approved ? "" : "cancelled")
         }
+        function onRenderedHandleChanged() { root.unlockNote = "" }
+    }
+
+    // Unlocking is the keys app's. Send the person there for this request's account, for the
+    // app that asked; once it answers, read the request again, since an unlock may now cover it.
+    property string unlockNote: ""
+    function unlockInKeysApp() {
+        var handle = backend.renderedHandle
+        root.unlockNote = ""
+        logos.request("keystore.accounts.unlock",
+                      ({ account: backend.renderedAccount, app: backend.renderedRequester }), function (res) {
+            if (res.ok) {
+                if (backend.renderedHandle === handle) backend.acknowledge(handle)
+            } else if (res.error !== "cancelled") {
+                root.unlockNote = res.error === "unavailable" ? "No keys app could take this."
+                                                              : "The keys app did not unlock it (" + res.error + ")."
+            }
+        })
     }
     Component.onCompleted: root.ready = root.backend !== null && logos.isViewModuleReady("evm_signer_ui")
     readonly property var queue: {
@@ -362,6 +380,26 @@ Item {
                 // WHOLE view down: a QML compile error means the plugin never
                 // renders at all.
                 Component.onCompleted: textInput.passwordMaskDelay = 0
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                visible: root.needsSecret && backend.renderedCollects === "password" && backend.renderedAccount !== ""
+                LogosButton {
+                    objectName: "signerUnlockLink"
+                    text: "Unlock in the keys app…"
+                    onClicked: root.unlockInKeysApp()
+                }
+                LogosText {
+                    objectName: "unlockNote"
+                    visible: root.unlockNote !== ""
+                    Layout.fillWidth: true
+                    text: root.unlockNote
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    color: Theme.palette.textSecondary
+                }
             }
 
             RowLayout {

@@ -88,6 +88,15 @@ What was signed **without** being shown — inside an unlock the person granted 
 named apps only — is listed under "Signed without asking", refreshed when the manager announces
 one.
 
+## Unlocking is the keys app's
+
+The Signer never unlocks an account. A request that needs the account's password also offers
+"Unlock in the keys app…", which raises `keystore.accounts.unlock` with the request's `account`
+(from `acknowledge`) and, as `app`, the module that asked; the person decides the terms there.
+When the keys app answers, the request is acknowledged again if it is still on screen, so an
+unlock that now covers it drops the password field. A cancel says nothing; any other refusal is
+said under the link. A card's PIN, or a device that asks the person itself, gets no link.
+
 ## What the backend must never do
 
 Persist the password, log it, place it in a PROP, or emit it in an event. It

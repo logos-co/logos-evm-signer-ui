@@ -370,6 +370,7 @@ bool EvmSignerUiBackend::acknowledge(QString handle)
     setRenderedSigner(r.value(QStringLiteral("signer")).toString());
     setRenderedCollects(r.value(QStringLiteral("collects")).toString());
     setRenderedUnlocked(r.value(QStringLiteral("unlocked")).toBool());
+    setRenderedAccount(r.value(QStringLiteral("account")).toString());
     setRenderedBundleId(r.value(QStringLiteral("bundle_id")).toString());
     setClaimLines(claims);
     setRenderLines(lines);
@@ -468,6 +469,7 @@ void EvmSignerUiBackend::clearRendered()
     setRenderedSigner(QString());
     setRenderedCollects(QString());
     setRenderedUnlocked(false);
+    setRenderedAccount(QString());
     setClaimLines(QStringList());
     setRenderLines(QStringList());
     setClaimLines(QStringList());

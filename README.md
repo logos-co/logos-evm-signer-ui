@@ -22,4 +22,10 @@ answered — anyone who can add a custom token can put a friendly symbol on a
 hostile address — and they are simply absent when no token list is loaded, which
 is the ordinary case on a signing device.
 
+It also asks `qr_scanner_module`, optionally, for a QR wallet's request. Once
+approved here, the request is drawn here too, as the codes that carry it to the
+wallet, and the sheet then says how the wallet's answer is read. The scanner hands
+over those codes and whether one is in the camera's view: never a picture, and
+only to this app. With no scanner installed, nothing here changes.
+
 See `docs/specs.md` for what the approver identity does and does not assert.

@@ -92,7 +92,7 @@ sections:
         check_file: "result-keystore/modules"
 
       - title: "Build the signer manager"
-        run: "nix build 'github:logos-co/logos-signer-manager-module/7d7951d96af8611fd63f655d7717a849330df91b#install' --no-write-lock-file -o result-manager"
+        run: "nix build 'github:logos-co/logos-signer-manager-module/cd661b5a5fc119c01154982bc3c84f023dbcc4a2#install' --no-write-lock-file -o result-manager"
         code_block: "nix build 'github:logos-co/logos-signer-manager-module#install' --no-write-lock-file -o result-manager"
 
       - title: "The signer manager really produced modules"
@@ -126,7 +126,7 @@ sections:
         text: |
           A doc-test fixture beside the signer manager: a signer behind the same interface that
           behaves like a device, so the device path runs with no hardware.
-        run: "nix build 'github:logos-co/logos-signer-manager-module/7d7951d96af8611fd63f655d7717a849330df91b?dir=doctests/mock-device#install' --no-write-lock-file -o result-device"
+        run: "nix build 'github:logos-co/logos-signer-manager-module/cd661b5a5fc119c01154982bc3c84f023dbcc4a2?dir=doctests/mock-device#install' --no-write-lock-file -o result-device"
         code_block: "nix build 'github:logos-co/logos-signer-manager-module?dir=doctests/mock-device#install' --no-write-lock-file -o result-device"
 
       - title: "The mock device really produced a module"
@@ -719,7 +719,7 @@ sections:
           set -euo pipefail
           nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' --no-write-lock-file -o result-basecamp
           nix build 'github:logos-co/logos-evm-keystore-module/e4c6fcd39411f0ed52083f0a7fb2701e742f81f1#install-portable' --no-write-lock-file -o result-keystore-p
-          nix build 'github:logos-co/logos-signer-manager-module/7d7951d96af8611fd63f655d7717a849330df91b#install-portable' --no-write-lock-file -o result-manager-p
+          nix build 'github:logos-co/logos-signer-manager-module/cd661b5a5fc119c01154982bc3c84f023dbcc4a2#install-portable' --no-write-lock-file -o result-manager-p
           nix build 'github:logos-co/logos-evm-signer-ui{release}#install-portable' --no-write-lock-file -o result-signer-p
           mkdir -p bctree/modules bctree/plugins
           cp -r result-keystore-p/modules/* bctree/modules/

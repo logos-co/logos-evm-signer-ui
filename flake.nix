@@ -6,9 +6,9 @@
     # The only REQUIRED module dependency, deliberately: this plugin cannot ask
     # anyone what an intent MEANS — it renders the lines the signer manager
     # authored, and section 3 is decoded from those very lines by a linked-in
-    # library. Pinned to the manager's multi-signer branch (#11), for `choose_signer`, until it merges.
+    # library.
     signer_manager_module = {
-      url = "github:logos-co/logos-signer-manager-module/7d7951d96af8611fd63f655d7717a849330df91b";
+      url = "github:logos-co/logos-signer-manager-module";
       # Without the follows it drags its own module-builder, and a skewed generated
       # ABI segfaults the module inside provider init.
       inputs.logos-module-builder.follows = "logos-module-builder";

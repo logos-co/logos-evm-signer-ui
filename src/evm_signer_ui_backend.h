@@ -40,6 +40,8 @@ public:
     bool approve(QString handle, QString bundleId, QString password) override;
     bool reject(QString handle) override;
     void dismiss() override;
+    bool qrPress() override;
+    bool qrCancel() override;
 
 protected:
     void onContextReady() override;
@@ -57,6 +59,19 @@ private:
     /// Refresh on a clean event-loop stack. Use this from event callbacks:
     /// calling out synchronously from an IPC callback deadlocks the reply.
     void refreshSoon();
+    /// A QR wallet's request on screen: draw its session here, so the scanner opens no window.
+    void qrClaim();
+    /// The request is gone: let the scanner go, off the IPC stack.
+    void qrRelease();
+    void qrPoll();
+
+    /// The scanner's handle for this app's claim on drawing sessions; empty while none is held,
+    /// or where qr_scanner_module isn't installed.
+    QString m_qrHandle;
+    /// Names the codes in `qrFramesJson`, which the scanner then doesn't send again.
+    QString m_qrFramesId;
+    QTimer m_qrPoll;
+    bool m_qrInFlight = false;
 
     /// Built once: it parses ~430KB of ABI JSON. Null if that ever fails, in
     /// which case interpretation is simply absent.

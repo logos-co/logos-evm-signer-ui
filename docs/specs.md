@@ -85,6 +85,21 @@ is still working on keeps the sheet up, reading "Confirm on the signing device",
 disabled and a line saying the request stays until the device answers. The manager's settle
 event ends it.
 
+A QR wallet's request (signer `qr_signer_module`) is drawn here instead of in a window of the
+scanner's:
+- While it is on screen, the backend holds `qr_scanner_module`'s presenter claim. That module is an
+  optional dependency, and the core naming this app as the caller is what lets it draw sessions.
+  The wallet's session then starts with no window.
+- Once approved, `qrJson` and `qrFramesJson` carry what the scanner's `presenter_view` answers.
+  The sheet draws the codes in turn, dark on white with their quiet zone, under the hint and a
+  button for the next step ("Scan the answer", then "Show the request again"). While the camera
+  reads, it says whether a code is in view and how many parts are read. No picture comes here.
+- Cancel ends the wallet's session, which ends the request. So does Back, rather than leave the
+  camera waiting.
+- A session that started in the scanner's window before this app held the claim stays there, and
+  the sheet says so.
+- The claim is let go when the request settles, however it settles, or leaves the screen.
+
 What was signed **without** being shown — inside an unlock the person granted that way, for
 named apps only — is listed under "Signed without asking", refreshed when the manager announces
 one.

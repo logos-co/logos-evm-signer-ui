@@ -92,7 +92,7 @@ sections:
         check_file: "result-keystore/modules"
 
       - title: "Build the signer manager"
-        run: "nix build 'github:logos-co/logos-signer-manager-module/1a385f4e41ef54f388a192037bd9d9aa7165a505#install' --no-write-lock-file -o result-manager"
+        run: "nix build 'github:logos-co/logos-signer-manager-module/7d7951d96af8611fd63f655d7717a849330df91b#install' --no-write-lock-file -o result-manager"
         code_block: "nix build 'github:logos-co/logos-signer-manager-module#install' --no-write-lock-file -o result-manager"
 
       - title: "The signer manager really produced modules"
@@ -126,7 +126,7 @@ sections:
         text: |
           A doc-test fixture beside the signer manager: a signer behind the same interface that
           behaves like a device, so the device path runs with no hardware.
-        run: "nix build 'github:logos-co/logos-signer-manager-module/1a385f4e41ef54f388a192037bd9d9aa7165a505?dir=doctests/mock-device#install' --no-write-lock-file -o result-device"
+        run: "nix build 'github:logos-co/logos-signer-manager-module/7d7951d96af8611fd63f655d7717a849330df91b?dir=doctests/mock-device#install' --no-write-lock-file -o result-device"
         code_block: "nix build 'github:logos-co/logos-signer-manager-module?dir=doctests/mock-device#install' --no-write-lock-file -o result-device"
 
       - title: "The mock device really produced a module"
@@ -611,6 +611,62 @@ sections:
               value: false
               timeout: 20000
 
+            - name: "The device's account, held by the keystore too: both are offered"
+              # The probe gives the keystore the device's phrase and asks again. The keystore comes
+              # first; the mock device is named by its model.
+              action: wait_for
+              texts:
+                - "Purpose (claimed by the requester): Doc-test: the person chooses the device"
+                - "Sign with"
+                - "This device (Keystore)"
+                - "software keys"
+              timeout: 30000
+              screenshot: "evm-signer-ui-sign-with.png"
+
+            - name: "...the keystore by default, which asks for the password"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "vaultPasswordField"
+              property: "visible"
+              value: true
+
+            - name: "Choose the device"
+              action: click
+              target: "software keys"
+
+            - name: "...which asks for no password"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "vaultPasswordField"
+              property: "visible"
+              value: false
+              timeout: 5000
+
+            - name: "Approve arms after the dwell, for the device chosen"
+              action: wait_for
+              texts: ["Approve"]
+              timeout: 5000
+
+            - name: "Approve, for the device chosen"
+              action: click
+              target: "Approve"
+
+            - name: "The device chosen waits for its person"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "deviceWaiting"
+              property: "visible"
+              value: true
+              timeout: 10000
+
+            - name: "Confirmed on the device chosen: the request leaves the screen"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "deviceWaiting"
+              property: "visible"
+              value: false
+              timeout: 20000
+
             - name: "Let the probe collect it"
               # It polls every 250 ms; the app is stopped as soon as this list ends.
               action: sleep
@@ -628,10 +684,12 @@ sections:
       - title: "What the probe collected from the device"
         text: |
           A signature the device made once the person confirmed there, which the manager checked
-          against the device's account before handing it over.
-        run: "grep -h 'SIGNER_PROBE_DEVICE' ui-test-app.log"
+          against the device's account before handing it over. Then the same account held by the
+          keystore too, signed by the device the person chose.
+        run: "grep -hE 'SIGNER_PROBE_(DEVICE|CHOSEN)' ui-test-app.log"
         expect_contains:
           - "SIGNER_PROBE_DEVICE_SIGNED: 0x"
+          - "SIGNER_PROBE_CHOSEN_SIGNED: 0x"
 
 
 
@@ -661,7 +719,7 @@ sections:
           set -euo pipefail
           nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' --no-write-lock-file -o result-basecamp
           nix build 'github:logos-co/logos-evm-keystore-module/e4c6fcd39411f0ed52083f0a7fb2701e742f81f1#install-portable' --no-write-lock-file -o result-keystore-p
-          nix build 'github:logos-co/logos-signer-manager-module/1a385f4e41ef54f388a192037bd9d9aa7165a505#install-portable' --no-write-lock-file -o result-manager-p
+          nix build 'github:logos-co/logos-signer-manager-module/7d7951d96af8611fd63f655d7717a849330df91b#install-portable' --no-write-lock-file -o result-manager-p
           nix build 'github:logos-co/logos-evm-signer-ui{release}#install-portable' --no-write-lock-file -o result-signer-p
           mkdir -p bctree/modules bctree/plugins
           cp -r result-keystore-p/modules/* bctree/modules/

@@ -509,6 +509,22 @@ sections:
               timeout: 30000
               screenshot: "evm-signer-ui-bitcoin.png"
 
+            - name: "Section 3 adds the send up, rather than saying nothing decoded"
+              # The decoder reads EVM calls only. This is the backend's sum of the manager's own
+              # figures above, the reading tests/sheet_lines_test.cpp pins.
+              action: wait_for
+              texts:
+                - "Interpreted: Bitcoin — section 2's own figures, added up on this device"
+                - "  Sends 0.00060000 BTC to an address not shown to be this wallet's; 0.00039000 BTC comes back to this wallet; fee 1,000 sats."
+              timeout: 6000
+
+            - name: "...and the empty-state line is gone"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "noInterpretationLine"
+              property: "visible"
+              value: false
+
             - name: "Type the wallet's password"
               action: set_text
               find_by: "objectName"

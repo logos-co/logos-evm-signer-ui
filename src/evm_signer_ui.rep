@@ -67,8 +67,8 @@ class EvmSignerUi
     // look like the derived half.
     PROP(QStringList claimLines READONLY)
 
-    // Locally decoded reading of the calldata in `renderLines`. Empty whenever
-    // nothing decoded, which is not an error. Never a substitute for the above.
+    // Locally decoded reading of the calldata in `renderLines`, or a Bitcoin request's figures
+    // added up. Empty whenever nothing decoded, which is not an error. Never a substitute for the above.
     PROP(QStringList interpretationLines READONLY)
 
     // False until the sheet has been fully visible for the dwell period. Held

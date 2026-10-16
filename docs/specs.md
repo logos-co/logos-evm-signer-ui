@@ -60,6 +60,23 @@ expecting the latter will be wrong.
   that parsed the intent and the only one that can tell requester-supplied text
   from its own.
 
+## Section 3 for a Bitcoin request
+
+The decoder reads EVM calls only. For a Bitcoin request the backend adds up section 2's own lines
+instead: what goes back to this wallet (which the manager checked), what is paid out, the fee and
+the inputs. The first line says where the figures came from, the second what the send does:
+
+```
+Interpreted: Bitcoin — section 2's own figures, added up on this device
+  Everything comes back to this wallet; you pay only the 141-sat fee.
+```
+
+or `Sends 0.00003000 BTC to an address not shown to be this wallet's; 0.00363024 BTC comes back to
+this wallet; fee 141 sats.` "Not shown to be this wallet's" is all the manager's lines say of a
+payment: it proves only the outputs the PSBT claims for this wallet. A line the backend does not
+know, or figures that do not add up to the inputs, give one line instead: section 2 is the signer
+manager's whole reading of this Bitcoin transaction.
+
 ## The dwell
 
 Approve arms 500 ms after the sheet is shown, held in C++ so a QML-side edit

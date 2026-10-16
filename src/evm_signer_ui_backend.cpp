@@ -7,6 +7,7 @@
 #include <QScopeGuard>
 
 #include "logos_sdk.h"
+#include "sheet_lines.h"
 #include "tx_decoder.h"
 
 namespace {
@@ -43,6 +44,19 @@ EvmSignerUiBackend::~EvmSignerUiBackend()
 // describe different bytes than the human is reading.
 QStringList EvmSignerUiBackend::interpret(const QStringList &lines) const
 {
+    // A Bitcoin request is read here from the same lines; the decoder reads EVM calls only.
+    std::vector<std::string> text;
+    for (const QString &l : lines) {
+        text.push_back(l.toStdString());
+    }
+    if (const std::vector<std::string> btc = sheet::bitcoinReading(text); !btc.empty()) {
+        QStringList out;
+        for (const std::string &l : btc) {
+            out << QString::fromStdString(l);
+        }
+        return out;
+    }
+
     if (!m_decoder || lines.isEmpty()) {
         return {};
     }

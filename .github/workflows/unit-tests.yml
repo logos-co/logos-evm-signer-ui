@@ -1,0 +1,30 @@
+name: evm-signer-ui unit tests
+
+# What the backend adds to the sheet from what it already holds: a Bitcoin request's section 3.
+# Plain C++, so no Nix, no Qt and no host.
+
+on:
+  pull_request:
+    branches: [master, main]
+  push:
+    branches: [master, main]
+
+concurrency:
+  group: unit-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sheet-lines:
+    name: sheet_lines (plain C++)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: tests/sheet_lines_test.cpp
+        run: |
+          set -euo pipefail
+          c++ -std=c++17 -Wall -Wextra -Werror -Isrc src/sheet_lines.cpp tests/sheet_lines_test.cpp -o sheet_lines_test
+          ./sheet_lines_test | tee /tmp/unit.log
+          grep -q "RESULT: ALL PASS" /tmp/unit.log
+          # A file that stops asserting must not pass by staying quiet.
+          n=$(grep -c "  PASS  " /tmp/unit.log)
+          echo "assertions: $n"; [ "$n" -ge 12 ]

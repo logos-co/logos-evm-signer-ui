@@ -85,7 +85,7 @@ jobs:
             echo "::error::a probe reported failures"; exit 1
           fi
           n=$(grep -c "  PASS  " /tmp/probe.log)
-          echo "assertions: $n"; [ "$n" -ge 61 ]
+          echo "assertions: $n"; [ "$n" -ge 65 ]
 
   doctests:
     name: evm-signer-ui doc-tests (${{ matrix.os }})

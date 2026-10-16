@@ -16,6 +16,9 @@ Item {
     readonly property string claim: "Purpose (claimed by the requester): Send 1 ETH to Alice"
     readonly property string signedLine: "Commitment: 9f86d081"
     readonly property string interpreted: "Interpreted: plain value transfer"
+    // What the backend makes of the Bitcoin send below: tests/sheet_lines_test.cpp asserts it.
+    readonly property string btcReading: "Interpreted: Bitcoin — section 2's own figures, added up on this device"
+    readonly property string btcSummary: "  Everything comes back to this wallet; you pay only the 141-sat fee."
 
     property int failures: 0
 
@@ -60,6 +63,11 @@ Item {
         return probe.textsUnder(probe.find(view.item, name)).join("\n")
     }
 
+    // A section's numbered heading: the first text under it.
+    function headingOf(name) {
+        return probe.textsUnder(probe.find(view.item, name))[0]
+    }
+
     QtObject {
         id: shell
         signal intentRequested(string requestId, string intent, var params, string requesterName)
@@ -79,6 +87,7 @@ Item {
         property string renderedHandle: ""
         property string renderedBundleId: ""
         property string renderedRequester: ""
+        property string renderedRequesterName: ""
         property string renderedSigner: ""
         property string renderedCollects: ""
         property string renderedSignersJson: "[]"
@@ -100,6 +109,7 @@ Item {
         function acknowledge(handle) {
             fake.renderedHandle = handle
             fake.renderedRequester = "eth_wallet_backend"
+            fake.renderedRequesterName = ""
             fake.renderedBundleId = "9f86d081"
             fake.claimLines = [probe.claim]
             fake.renderLines = ["Account: 0xf39F…2266", probe.signedLine,
@@ -112,10 +122,28 @@ Item {
         function acknowledgeBare(handle) {
             fake.renderedHandle = handle
             fake.renderedRequester = "eth_wallet_backend"
+            fake.renderedRequesterName = ""
             fake.renderedBundleId = "9f86d081"
             fake.claimLines = []
             fake.renderLines = ["Account: 0xf39F…2266", probe.signedLine]
             fake.interpretationLines = []
+            return true
+        }
+
+        // A Bitcoin send from a wallet's core module, which its installed package names.
+        function acknowledgeBitcoin(handle) {
+            fake.renderedHandle = handle
+            fake.renderedRequester = "bitcoin_wallet_core_module"
+            fake.renderedRequesterName = "Bitcoin Wallet Core"
+            fake.renderedBundleId = "5be1c0de"
+            fake.claimLines = []
+            fake.renderLines = ["Wallet: \"Savings\"", "Commitment: 5be1c0de", "1 item(s) to sign:",
+                                "  [1] Bitcoin testnet4 · wallet \"Savings\", native segwit, account 0",
+                                "      Change 0.00363024 BTC back to this wallet (m/84'/1'/0'/1/0, checked)",
+                                "      Receive 0.00003000 BTC back to this wallet (m/84'/1'/0'/0/0, checked)",
+                                "      Fee 141 sats, about 1.0 sat/vB, computed from the inputs",
+                                "      Spends 1 coin worth 0.00366165 BTC · replaceable (RBF)"]
+            fake.interpretationLines = [probe.btcReading, probe.btcSummary]
             return true
         }
     }
@@ -182,6 +210,32 @@ Item {
               false)
     }
 
+    function assertSectionOneNamesWhoAskedAsTheUserInstalledIt() {
+        console.log("")
+        console.log("section 1 names a module as its installed package does, and always by its id too.")
+        console.log("A name is the backend's to give: one the requester chose could say anything")
+        fake.acknowledgeBitcoin("apr_ccc333")
+        check("a named module reads as its name, then its id", probe.headingOf("sectionRequester"),
+              "1.  Requested by: Bitcoin Wallet Core (bitcoin_wallet_core_module)")
+        fake.acknowledgeBare("apr_bbb222")
+        check("a module nothing installed names reads as its id alone",
+              probe.headingOf("sectionRequester"), "1.  Requested by: eth_wallet_backend")
+    }
+
+    function assertABitcoinSendIsReadNotLeftUndecoded() {
+        console.log("")
+        console.log("a Bitcoin send. The decoder reads EVM calls only, and section 3 used to say")
+        console.log("nothing could be decoded, as if something were wrong. Now it adds up section 2")
+        fake.acknowledgeBitcoin("apr_ccc333")
+        var reading = probe.sectionTexts("sectionInterpretation")
+        check("section 3 says what it read, and how sure that is", reading.indexOf(probe.btcReading) >= 0, true)
+        check("...and what the send does", reading.indexOf(probe.btcSummary) >= 0, true)
+        check("...and no longer that nothing decoded", reading.indexOf("nothing could be decoded") >= 0, false)
+        check("section 2 still has the manager's every line",
+              probe.sectionTexts("sectionSigned").indexOf("      Spends 1 coin worth 0.00366165 BTC · replaceable (RBF)") >= 0,
+              true)
+    }
+
     Loader {
         id: view
         anchors.fill: parent
@@ -198,6 +252,8 @@ Item {
             probe.assertEachSectionCarriesItsOwnLines()
             probe.assertTheRequestersWordsStayOutOfWhatIsSigned()
             probe.assertAnEmptySectionSaysSoRatherThanVanishing()
+            probe.assertSectionOneNamesWhoAskedAsTheUserInstalledIt()
+            probe.assertABitcoinSendIsReadNotLeftUndecoded()
 
             console.log("")
             console.log(probe.failures ? "RESULT: FAILURES" : "RESULT: ALL PASS")

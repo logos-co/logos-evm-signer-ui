@@ -14,6 +14,8 @@ logos_module(
     SOURCES
         src/evm_signer_ui_backend.h
         src/evm_signer_ui_backend.cpp
+        src/sheet_lines.h
+        src/sheet_lines.cpp
     # Offline calldata decoding. A static archive, so it is linked in and no
     # library file lands beside the plugin for ui-host to mistake for one.
     EXTERNAL_LIBS

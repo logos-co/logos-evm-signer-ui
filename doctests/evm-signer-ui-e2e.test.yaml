@@ -312,6 +312,7 @@ sections:
               # `text` property EXACTLY — so this is the whole rendered string, as for
               # sections 2 and 3 below. Asserting the bare name silently waits out the
               # timeout and reports it as if the request had never been claimed.
+              # The id alone: no package_manager is staged, so nothing installed names it.
               texts: ["1.  Requested by: signer_probe"]
               # 35s, and it is load-bearing: cutting this to 20s to buy headroom
               # under the driver cap failed here with
@@ -508,6 +509,22 @@ sections:
                 - "Signer: keystore_module — asks for the account's password"
               timeout: 30000
               screenshot: "evm-signer-ui-bitcoin.png"
+
+            - name: "Section 3 adds the send up, rather than saying nothing decoded"
+              # The decoder reads EVM calls only. This is the backend's sum of the manager's own
+              # figures above, the reading tests/sheet_lines_test.cpp pins.
+              action: wait_for
+              texts:
+                - "Interpreted: Bitcoin — section 2's own figures, added up on this device"
+                - "  Sends 0.00060000 BTC to an address not shown to be this wallet's; 0.00039000 BTC comes back to this wallet; fee 1,000 sats."
+              timeout: 6000
+
+            - name: "...and the empty-state line is gone"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "noInterpretationLine"
+              property: "visible"
+              value: false
 
             - name: "Type the wallet's password"
               action: set_text

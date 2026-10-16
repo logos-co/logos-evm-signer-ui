@@ -72,6 +72,8 @@ Item {
         property string renderedRequester: ""
         property string renderedSigner: ""
         property string renderedCollects: ""
+        property string renderedSignersJson: "[]"
+        property bool renderedSignerExplicit: false
         property bool renderedUnlocked: false
         property string renderedAccount: ""
         property string unattendedJson: "[]"
@@ -103,6 +105,7 @@ Item {
             fake.renderedHandle = handle
             return true
         }
+        function chooseSigner(handle, signer) { return false }
         function approve(handle, bundleId, password) { return true }
         function reject(handle) { return true }
         function dismiss() { fake.renderedHandle = "" }

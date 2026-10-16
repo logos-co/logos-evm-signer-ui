@@ -37,6 +37,7 @@ public:
     void refresh() override;
     void refreshUnattended() override;
     bool acknowledge(QString handle) override;
+    bool chooseSigner(QString handle, QString signer) override;
     bool approve(QString handle, QString bundleId, QString password) override;
     bool reject(QString handle) override;
     void dismiss() override;
@@ -48,6 +49,10 @@ protected:
 
 private:
     void clearRendered();
+    /// Who signs the request on screen, and who else could, from the manager's reply.
+    void applySigner(const QJsonObject &r);
+    /// Read the signers again: one was plugged in or out, or the default moved.
+    void refreshSigners();
     /// Decode the calldata in `lines`. Empty on any failure — the verbatim
     /// lines are complete on their own, so a decoder problem must not surface
     /// as an approval problem.

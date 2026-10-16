@@ -9,13 +9,13 @@
       inputs.logos-module-builder.follows = "logos-module-builder";
     };
     signer_manager_module = {
-      url = "github:logos-co/logos-signer-manager-module/1a385f4e41ef54f388a192037bd9d9aa7165a505";
+      url = "github:logos-co/logos-signer-manager-module/cd661b5a5fc119c01154982bc3c84f023dbcc4a2";
       inputs.logos-module-builder.follows = "logos-module-builder";
       inputs.keystore_module.follows = "keystore_module";
     };
     # A signer that behaves like a device: a doc-test fixture beside the manager.
     mock_device_signer = {
-      url = "github:logos-co/logos-signer-manager-module/1a385f4e41ef54f388a192037bd9d9aa7165a505?dir=doctests/mock-device";
+      url = "github:logos-co/logos-signer-manager-module/cd661b5a5fc119c01154982bc3c84f023dbcc4a2?dir=doctests/mock-device";
       inputs.logos-module-builder.follows = "logos-module-builder";
     };
   };

@@ -43,6 +43,9 @@ class EvmSignerUi
     PROP(QString renderedHandle="" READONLY)
     PROP(QString renderedBundleId="" READONLY)
     PROP(QString renderedRequester="" READONLY)
+    // What the user's installed package calls that module, from package_manager (OPTIONAL);
+    // never the requester's own word. Empty when it is absent, not plain, or another package's too.
+    PROP(QString renderedRequesterName="" READONLY)
     // Who signs, what it asks for (`password`, `pin`, or `nothing` for a device that asks the
     // person itself), and whether an unlock covers this request so no secret is needed.
     PROP(QString renderedSigner="" READONLY)

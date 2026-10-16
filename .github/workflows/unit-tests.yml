@@ -1,7 +1,7 @@
 name: evm-signer-ui unit tests
 
-# What the backend adds to the sheet from what it already holds: a Bitcoin request's section 3.
-# Plain C++, so no Nix, no Qt and no host.
+# What the backend works out for the sheet: the requester's installed name and a Bitcoin
+# request's section 3. Plain C++, so no Nix, no Qt and no host.
 
 on:
   pull_request:
@@ -27,4 +27,4 @@ jobs:
           grep -q "RESULT: ALL PASS" /tmp/unit.log
           # A file that stops asserting must not pass by staying quiet.
           n=$(grep -c "  PASS  " /tmp/unit.log)
-          echo "assertions: $n"; [ "$n" -ge 12 ]
+          echo "assertions: $n"; [ "$n" -ge 26 ]

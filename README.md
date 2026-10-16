@@ -22,4 +22,10 @@ answered — anyone who can add a custom token can put a friendly symbol on a
 hostile address — and they are simply absent when no token list is loaded, which
 is the ordinary case on a signing device.
 
+It also asks `package_manager`, optionally, what the requester's installed package
+calls it, so the sheet reads "Requested by: Bitcoin Wallet Core
+(bitcoin_wallet_core_module)". The name is that package's `display_name`, never
+anything the request says, and the id the manager gave always follows it. With no
+package manager, or a name another package wears too, the id stands alone.
+
 See `docs/specs.md` for what the approver identity does and does not assert.

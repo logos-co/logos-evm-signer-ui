@@ -60,6 +60,20 @@ expecting the latter will be wrong.
   that parsed the intent and the only one that can tell requester-supplied text
   from its own.
 
+## Who asked
+
+Section 1 names the requester by the id `acknowledge` gives as `requester`: the caller's module
+name, as the platform identified it. When `package_manager` is installed, the backend asks it
+which installed package has that name, and shows that package's `display_name` before the id:
+"Requested by: Bitcoin Wallet Core (bitcoin_wallet_core_module)".
+
+- The name never comes from the request. The requester writes its `purpose`, which stays in the
+  section's body, and nothing in the heading.
+- It is still a name a package's author chose. So the id always follows it, and the name is
+  dropped unless it is short plain ASCII (letters, digits, single spaces and `- . '`) and no other
+  installed package wears it too, compared by letters and digits in any case.
+- With no package manager, no name, or a dropped one, the heading is the id alone.
+
 ## Section 3 for a Bitcoin request
 
 The decoder reads EVM calls only. For a Bitcoin request the backend adds up section 2's own lines

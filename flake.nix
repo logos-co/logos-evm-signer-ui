@@ -23,6 +23,14 @@
       inputs.logos-module-builder.follows = "logos-module-builder";
     };
 
+    # OPTIONAL. Section 1 names who asked as the user's installed package does, never as the
+    # requester says. Only its contract is read here, so its library input is cut.
+    package_manager = {
+      url = "github:logos-co/logos-package-manager-module";
+      inputs.logos-module-builder.follows = "logos-module-builder";
+      inputs.logos-package-manager.follows = "";
+    };
+
     # Offline calldata decoding, linked in as a static archive. A library, not a
     # module: nothing is asked of the network, so the TIERS the human reads still
     # depend on this plugin alone.

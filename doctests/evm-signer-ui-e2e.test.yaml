@@ -312,6 +312,7 @@ sections:
               # `text` property EXACTLY — so this is the whole rendered string, as for
               # sections 2 and 3 below. Asserting the bare name silently waits out the
               # timeout and reports it as if the request had never been claimed.
+              # The id alone: no package_manager is staged, so nothing installed names it.
               texts: ["1.  Requested by: signer_probe"]
               # 35s, and it is load-bearing: cutting this to 20s to buy headroom
               # under the driver cap failed here with

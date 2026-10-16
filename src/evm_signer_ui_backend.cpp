@@ -4,6 +4,7 @@
 #include <QJsonDocument>
 #include <QDateTime>
 #include <QJsonObject>
+#include <QPointer>
 #include <QScopeGuard>
 
 #include "logos_sdk.h"
@@ -216,6 +217,36 @@ QStringList EvmSignerUiBackend::tokenListLines(const QJsonObject &leg) const
     return out;
 }
 
+void EvmSignerUiBackend::nameRequester(const QString &handle, const QString &module)
+{
+    if (module.isEmpty()) {
+        return;
+    }
+    // What the user installed, never the request. Asked without waiting: the id shows at once, the
+    // name joins it when package_manager answers, and with none installed nothing waits at all.
+    QPointer<EvmSignerUiBackend> self(this);
+    modules().package_manager.getInstalledPackagesAsyncResult(
+        [self, handle, module](logos::AsyncResult<QVariantList> res) {
+            if (!self || !res.error.ok()) {
+                return;
+            }
+            std::vector<std::pair<std::string, std::string>> installed;
+            for (const QVariant &p : res.value) {
+                const QVariantMap m = p.toMap();
+                installed.emplace_back(m.value(QStringLiteral("name")).toString().toStdString(),
+                                       m.value(QStringLiteral("displayName")).toString().toStdString());
+            }
+            const QString name = QString::fromStdString(sheet::installedName(module.toStdString(), installed));
+            QMetaObject::invokeMethod(self, [self, handle, module, name] {
+                // Only onto the request it was asked for, if that is still the one on screen.
+                if (self && self->renderedHandle() == handle && self->renderedRequester() == module) {
+                    self->setRenderedRequesterName(name);
+                }
+            }, Qt::QueuedConnection);
+        },
+        Timeout(2000));
+}
+
 void EvmSignerUiBackend::onContextReady()
 {
     // Null on failure, and that is survivable: every other property is
@@ -381,6 +412,10 @@ bool EvmSignerUiBackend::acknowledge(QString handle)
 
     setLastError(QString());
     setClaimLines(claims);
+    // A name belongs to one request: gone before another's id shows, and asked for again below.
+    if (r.value(QStringLiteral("handle")).toString() != renderedHandle()) {
+        setRenderedRequesterName(QString());
+    }
     setRenderedRequester(r.value(QStringLiteral("requester")).toString());
     setRenderedSigner(r.value(QStringLiteral("signer")).toString());
     setRenderedCollects(r.value(QStringLiteral("collects")).toString());
@@ -391,6 +426,7 @@ bool EvmSignerUiBackend::acknowledge(QString handle)
     setRenderLines(lines);
     setInterpretationLines(interpret(lines));
     setRenderedHandle(r.value(QStringLiteral("handle")).toString());
+    nameRequester(renderedHandle(), renderedRequester());
     startDwell();
     return true;
 }
@@ -482,6 +518,7 @@ void EvmSignerUiBackend::clearRendered()
     setRenderedHandle(QString());
     setRenderedBundleId(QString());
     setRenderedRequester(QString());
+    setRenderedRequesterName(QString());
     setRenderedSigner(QString());
     setRenderedCollects(QString());
     setRenderedUnlocked(false);

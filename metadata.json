@@ -19,7 +19,8 @@
     {
       "name": "token_list_module",
       "version": "~0.1.0"
-    }
+    },
+    "package_manager"
   ],
   "uses": [
     {

@@ -8,7 +8,40 @@ namespace sheet {
 
 namespace {
 
+bool asciiLetter(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
+bool asciiDigit(char c) { return c >= '0' && c <= '9'; }
 bool startsWith(const std::string &s, const std::string &p) { return s.compare(0, p.size(), p) == 0; }
+
+// Short and plain, so a name cannot carry a second id in brackets, a look-alike letter or a
+// direction mark: ASCII letters first, then letters, digits, single spaces and - . ' only.
+bool plainName(const std::string &s)
+{
+    if (s.empty() || s.size() > 40 || !asciiLetter(s.front()) || s.back() == ' ') {
+        return false;
+    }
+    for (size_t i = 0; i < s.size(); ++i) {
+        const char c = s[i];
+        if (!(asciiLetter(c) || asciiDigit(c) || c == '-' || c == '.' || c == '\''
+              || (c == ' ' && s[i - 1] != ' '))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// What two names have to differ in to be told apart at a glance: letters and digits, any case.
+std::string folded(const std::string &s)
+{
+    std::string out;
+    for (const char c : s) {
+        if (asciiDigit(c) || (c >= 'a' && c <= 'z')) {
+            out += c;
+        } else if (c >= 'A' && c <= 'Z') {
+            out += char(c - 'A' + 'a');
+        }
+    }
+    return out;
+}
 
 constexpr uint64_t kCoin = 100000000;
 constexpr uint64_t kMaxSats = 21000000 * kCoin;
@@ -30,6 +63,31 @@ std::string btc(uint64_t sats)
 }
 
 } // namespace
+
+std::string installedName(const std::string &module,
+                          const std::vector<std::pair<std::string, std::string>> &installed)
+{
+    std::set<std::string> names;
+    for (const auto &[name, displayName] : installed) {
+        if (name == module && !displayName.empty()) {
+            names.insert(displayName);
+        }
+    }
+    // Two copies that disagree give neither name.
+    if (names.size() != 1) {
+        return {};
+    }
+    const std::string name = *names.begin();
+    if (!plainName(name) || name == module) {
+        return {};
+    }
+    for (const auto &[other, displayName] : installed) {
+        if (other != module && folded(displayName) == folded(name)) {
+            return {};
+        }
+    }
+    return name;
+}
 
 std::vector<std::string> bitcoinReading(const std::vector<std::string> &lines)
 {

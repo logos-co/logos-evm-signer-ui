@@ -104,6 +104,8 @@ Item {
         property string renderedRequester: ""
         property string renderedSigner: ""
         property string renderedCollects: ""
+        property string renderedSignersJson: "[]"
+        property bool renderedSignerExplicit: false
         property bool renderedUnlocked: false
         property string unattendedJson: "[]"
         property var claimLines: []
@@ -136,6 +138,8 @@ Item {
             fake.renderLines = ["Account: 0xf39F…2266", "Commitment: abcd", "Send 0.1 ETH"]
             return true
         }
+
+        function chooseSigner(handle, signer) { return false }
 
         function approve(handle, bundleId, password) { return true }
         function reject(handle) { return true }

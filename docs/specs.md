@@ -109,6 +109,20 @@ in one line, in the words `evm_signer_cli` uses, so one request reads alike on b
 `Signer: keystore_module — asks for the account's password`, `— this account is unlocked: no
 password`, `— confirm on the device when it asks`, or `— asks for the card's PIN`.
 
+When several signers hold the account (the keystore, a Keycard in a reader, a Keycard Shell over
+USB, a QR wallet), the line becomes "Sign with": one row per signer, in the manager's order.
+- Each row says whether the signer is ready, connected or not connected, and how it signs: by
+  password or PIN, on the device, or with codes shown here. A QR wallet is never called
+  connected: it needs no connection.
+- The person may choose any signer that can take the request. `chooseSigner` tells the manager,
+  whose answer, not the click, says who signs. The request and its commitment stay the same, so
+  there is no second reading. Only the secret below changes, and a typed one is cleared.
+- A row that can't be chosen says why: not connected, or the manager's reason it can't take this
+  request, such as a bare digest on a device that shows what it signs.
+- When the manager announces that accounts changed, the rows are read again (`approval_signers`).
+  At Approve, a chosen device that went away, or a default that moved, is the manager's own
+  message, never "check the password". The request stays on screen.
+
 The password field shows only when a secret is needed, and Approve then sends an empty one. The
 manager decides: an approval with no secret signs only inside an unlock that still covers the
 requester, so a stale view cannot sign anything the person did not unlock. An approval a device

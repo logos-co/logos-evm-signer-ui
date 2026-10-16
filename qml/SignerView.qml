@@ -146,6 +146,36 @@ Item {
         return "Signer: " + backend.renderedSigner + " — " + how
     }
 
+    // Every signer holding the account, ranked by the manager. With more than one, the person picks.
+    readonly property var holders: {
+        try { return JSON.parse(backend ? backend.renderedSignersJson : "[]") } catch (e) { return [] }
+    }
+    readonly property bool choosing: showing && holders.length > 1 && backend.renderedSigning !== true
+    function holderName(h) {
+        if (h.transport === "keystore") return "This device (Keystore)"
+        if (h.transport === "reader") return "Keycard · reader"
+        if (h.transport === "usb") {
+            var named = { keycard_shell: "Keycard Shell", ledger: "Ledger", trezor: "Trezor" }
+            return (named[h.kind] || h.model || h.signer) + " · USB"
+        }
+        if (h.transport === "qr") return h.model && h.model !== "QR wallet" ? "QR · " + h.model : "QR wallet"
+        return h.model || h.signer
+    }
+    function holderState(h) {
+        return h.presence === "local" ? "ready" : h.presence === "connected" ? "connected"
+             : h.presence === "absent" ? "not connected" : ""
+    }
+    function holderHow(h) {
+        if (h.canTake !== true) return h.why || "It can't sign this request."
+        if (h.presence === "absent")
+            return h.transport === "reader" ? "Insert the card in a reader to sign with it." : "Connect it to sign with it."
+        if (h.signer === backend.renderedSigner && backend.renderedUnlocked) return "This account is unlocked: no password."
+        if (h.collects === "password") return "Asks for the account's password."
+        if (h.collects === "pin") return "Asks for the card's PIN."
+        if (h.transport === "qr") return "Shows the request as codes here, then reads its answer."
+        return h.kind === "keycard_shell" ? "Confirm on the Shell when it asks." : "Confirm on the device when it asks."
+    }
+
     component Section: Rectangle {
         id: sec
         property int number: 0
@@ -373,11 +403,58 @@ Item {
 
             LogosText {
                 objectName: "signerLine"
-                visible: root.signerLine !== ""
+                visible: root.signerLine !== "" && !root.choosing
                 Layout.fillWidth: true
                 text: root.signerLine
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
+            }
+
+            // Which signer signs: the request and its commitment stay the same whichever is picked,
+            // so only the secret below changes, and a typed one is cleared.
+            ColumnLayout {
+                objectName: "signWith"
+                visible: root.choosing
+                Layout.fillWidth: true
+                spacing: 2
+
+                LogosText {
+                    text: "Sign with"
+                    textFormat: Text.PlainText
+                    font.bold: true
+                }
+                Repeater {
+                    model: root.choosing ? root.holders : []
+                    delegate: RowLayout {
+                        objectName: "signWithRow"
+                        Layout.fillWidth: true
+                        spacing: 8
+                        enabled: modelData.canTake === true && modelData.presence !== "absent"
+                        LogosRadioButton {
+                            objectName: "signWithChoice"
+                            // Not checkable: the manager's answer says who signs, not the click.
+                            checkable: false
+                            checked: modelData.signer === backend.renderedSigner
+                            text: root.holderName(modelData)
+                            onClicked: if (backend.chooseSigner(backend.renderedHandle, modelData.signer)) pw.text = ""
+                        }
+                        LogosText {
+                            objectName: "signWithState"
+                            text: root.holderState(modelData)
+                            textFormat: Text.PlainText
+                            opacity: 0.75
+                        }
+                        LogosText {
+                            objectName: "signWithHow"
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 1
+                            text: root.holderHow(modelData)
+                            textFormat: Text.PlainText
+                            wrapMode: Text.Wrap
+                            color: Theme.palette.textSecondary
+                        }
+                    }
+                }
             }
 
             LogosText {

@@ -53,6 +53,12 @@ class EvmSignerUi
     PROP(bool renderedUnlocked=false READONLY)
     // The account it signs with: an address, or a Bitcoin wallet's id. What an unlock names.
     PROP(QString renderedAccount="" READONLY)
+    // Every signer holding the account, ranked, verbatim from the manager: `[{ signer, accountId,
+    // kind, model, transport, presence, available, collects, showsRequest, canTake, why? }]`. The
+    // person may sign with any that can take the request; `renderedSigner` is the one chosen, by
+    // them when `renderedSignerExplicit`, else the manager's default.
+    PROP(QString renderedSignersJson="[]" READONLY)
+    PROP(bool renderedSignerExplicit=false READONLY)
     // Approved, and its device is waiting for the person: nothing more to do here until it answers.
     PROP(bool renderedSigning=false READONLY)
 
@@ -93,6 +99,9 @@ class EvmSignerUi
     // handle the manager does not hold, or one already settled — which a caller pointed
     // here by an intent has to be able to tell apart from a request it can service.
     SLOT(bool acknowledge(QString handle))
+    // Sign the request on screen with another signer that holds its account. The request and its
+    // commitment stay the same, so it needs no second reading.
+    SLOT(bool chooseSigner(QString handle, QString signer))
     // The human said yes. `bundleId` must be the value that was displayed.
     SLOT(bool approve(QString handle, QString bundleId, QString password))
     // The human said no.

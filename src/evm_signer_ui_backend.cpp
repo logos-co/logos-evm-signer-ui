@@ -300,6 +300,10 @@ void EvmSignerUiBackend::onContextReady()
     modules().signer_manager_module.onSigned_without_asking([this](QString) {
         QTimer::singleShot(0, this, [this] { refreshUnattended(); });
     });
+    // A device plugged in or out: the request on screen may now be signed by another, off the IPC stack.
+    modules().signer_manager_module.onAccounts_changed([this](int) {
+        QTimer::singleShot(0, this, [this] { refreshSigners(); });
+    });
 
     m_poll.start(kPollMs);
     refresh();
@@ -425,23 +429,64 @@ bool EvmSignerUiBackend::acknowledge(QString handle)
         setRenderedRequesterName(QString());
     }
     setRenderedRequester(r.value(QStringLiteral("requester")).toString());
-    setRenderedSigner(r.value(QStringLiteral("signer")).toString());
-    setRenderedCollects(r.value(QStringLiteral("collects")).toString());
-    setRenderedUnlocked(r.value(QStringLiteral("unlocked")).toBool());
-    setRenderedAccount(r.value(QStringLiteral("account")).toString());
     setRenderedBundleId(r.value(QStringLiteral("bundle_id")).toString());
     setClaimLines(claims);
     setRenderLines(lines);
     setInterpretationLines(interpret(lines));
+    applySigner(r);
     setRenderedHandle(r.value(QStringLiteral("handle")).toString());
     nameRequester(renderedHandle(), renderedRequester());
     startDwell();
+    return true;
+}
+
+// acknowledge, choose_signer and approval_signers answer alike; only the signer part is read here,
+// since choosing a signer changes nothing about what is signed.
+void EvmSignerUiBackend::applySigner(const QJsonObject &r)
+{
+    setRenderedSigner(r.value(QStringLiteral("signer")).toString());
+    setRenderedCollects(r.value(QStringLiteral("collects")).toString());
+    setRenderedUnlocked(r.value(QStringLiteral("unlocked")).toBool());
+    setRenderedAccount(r.value(QStringLiteral("account")).toString());
+    setRenderedSignersJson(QString::fromUtf8(
+        QJsonDocument(r.value(QStringLiteral("signers")).toArray()).toJson(QJsonDocument::Compact)));
+    setRenderedSignerExplicit(r.value(QStringLiteral("explicit")).toBool());
     if (renderedSigner() == kQrSigner) {
         qrClaim();
     } else {
         qrRelease();
     }
+}
+
+bool EvmSignerUiBackend::chooseSigner(QString handle, QString signer)
+{
+    if (handle.isEmpty() || handle != renderedHandle() || renderedSigning()) {
+        setLastError(QStringLiteral("That is not the request on screen."));
+        return false;
+    }
+    if (signer == renderedSigner()) {
+        return true;
+    }
+    const QJsonObject r = parseObject(
+        modules().signer_manager_module.choose_signer(handle, renderedBundleId(), signer));
+    if (!r.value(QStringLiteral("ok")).toBool()) {
+        setLastError(r.value(QStringLiteral("error")).toString(QStringLiteral("Could not sign with that signer.")));
+        return false;
+    }
+    setLastError(QString());
+    applySigner(r);
     return true;
+}
+
+void EvmSignerUiBackend::refreshSigners()
+{
+    if (renderedHandle().isEmpty() || renderedSigning()) {
+        return;
+    }
+    const QJsonObject r = parseObject(modules().signer_manager_module.approval_signers(renderedHandle()));
+    if (r.value(QStringLiteral("ok")).toBool() && r.value(QStringLiteral("handle")).toString() == renderedHandle()) {
+        applySigner(r);
+    }
 }
 
 bool EvmSignerUiBackend::approve(QString handle, QString bundleId, QString password)
@@ -504,10 +549,22 @@ bool EvmSignerUiBackend::approve(QString handle, QString bundleId, QString passw
         setPendingJson(QString::fromUtf8(QJsonDocument(rest).toJson(QJsonDocument::Compact)));
     }
     if (!ok) {
-        // Generic but for a signer that did not answer, which no password fixes.
-        const bool unreachable = r.value(QStringLiteral("code")).toString() == QStringLiteral("unavailable");
-        setLastError(unreachable ? QStringLiteral("The signer did not answer. Try again.")
-                                 : QStringLiteral("Could not approve. Check the password and try again."));
+        // By code: the manager's own reason where no password would help, never "check the password".
+        const QString code = r.value(QStringLiteral("code")).toString();
+        const QString why = r.value(QStringLiteral("error")).toString();
+        const bool device = why.contains(QStringLiteral("connect")) || why.contains(QStringLiteral("no longer offers"));
+        if (code == QStringLiteral("signer_changed") || code == QStringLiteral("unsupported")
+            || code == QStringLiteral("refused") || (code == QStringLiteral("unavailable") && device)) {
+            setLastError(why);
+        } else if (code == QStringLiteral("unavailable")) {
+            setLastError(QStringLiteral("The signer did not answer. Try again."));
+        } else {
+            setLastError(QStringLiteral("Could not approve. Check the password and try again."));
+        }
+        // A device that went away, or a default that moved: show who would sign now.
+        if (code == QStringLiteral("signer_changed") || code == QStringLiteral("unavailable")) {
+            refreshSigners();
+        }
         return false;
     }
     clearRendered();
@@ -620,6 +677,8 @@ void EvmSignerUiBackend::clearRendered()
     setRenderedCollects(QString());
     setRenderedUnlocked(false);
     setRenderedAccount(QString());
+    setRenderedSignersJson(QStringLiteral("[]"));
+    setRenderedSignerExplicit(false);
     setRenderedSigning(false);
     setClaimLines(QStringList());
     setRenderLines(QStringList());

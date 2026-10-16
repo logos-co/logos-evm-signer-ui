@@ -90,6 +90,8 @@ Item {
         property string renderedRequesterName: ""
         property string renderedSigner: ""
         property string renderedCollects: ""
+        property string renderedSignersJson: "[]"
+        property bool renderedSignerExplicit: false
         property bool renderedUnlocked: false
         property string unattendedJson: "[]"
         property var claimLines: []
@@ -99,6 +101,7 @@ Item {
 
         signal settled(string handle, string state)
         function refresh() {}
+        function chooseSigner(handle, signer) { return false }
         function approve(handle, bundleId, password) { return true }
         function reject(handle) { return true }
         function dismiss() { fake.renderedHandle = "" }

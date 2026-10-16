@@ -9,8 +9,9 @@
 //!   4. poll approval_status until it settles (Tier B, receipt-gated)
 //!   5. fetch_result, print the signature     (Tier B, receipt-gated)
 //!
-//! Then the same again inside an unlock, two Bitcoin sends (`bitcoin_rounds`), and a signature
-//! from a device (`device_round`).
+//! Then the same again inside an unlock, two Bitcoin sends (`bitcoin_rounds`), a signature
+//! from a device (`device_round`), and one from that device's account once the keystore holds it
+//! too, with the person choosing the device (`chosen_round`).
 //!
 //! Nothing here can reach `approve()`. The signature this prints exists only
 //! because a human typed the vault password into the signer UI.
@@ -31,6 +32,9 @@ type Shared = std::sync::Arc<std::sync::Mutex<Value>>;
 /// Foundry's well-known account 0. A published test key: never fund it.
 const TEST_KEY: &str = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const VAULT_PASSWORD: &str = "doctest-pw";
+/// The mock device's phrase, the BIP-39 test vector: the keystore takes it for the chosen round.
+const DEVICE_PHRASE: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 const MESSAGE: &str = "I authorise the doc-test transfer";
 /// Foundry's test phrase, imported as a regtest Bitcoin wallet for the Bitcoin rounds.
 const PHRASE: &str = "test test test test test test test test test test test junk";
@@ -208,8 +212,23 @@ fn bitcoin_rounds() -> Result<(), String> {
 
 /// A signature from the mock device's EVM account. The Signer approves with nothing typed; the
 /// device waits for its button, which this fixture presses once the request is `signing`.
-fn device_round() -> Result<String, String> {
+fn device_round() -> Result<(String, String), String> {
     std::thread::sleep(Duration::from_secs(8));
+    let address = device_address()?;
+    let sig = sign_on_device(&address, "Doc-test: sign on a device", "Signed on the device", "REQUESTED_DEVICE")?;
+    Ok((address, sig))
+}
+
+/// The device's account, which the keystore now holds too: the Signer offers both, the keystore
+/// first, and the person chooses the device.
+fn chosen_round(address: &str) -> Result<String, String> {
+    let p = json!({ "phrase": DEVICE_PHRASE, "accountIndex": 0, "password": VAULT_PASSWORD });
+    ok_value(modules().keystore_module.import_mnemonic(&p.to_string()))?;
+    std::thread::sleep(Duration::from_secs(2));
+    sign_on_device(address, "Doc-test: the person chooses the device", "Signed on the device chosen", "REQUESTED_CHOSEN")
+}
+
+fn device_address() -> Result<String, String> {
     let listed = ok_value(modules().signer_manager_module.accounts())?;
     let address = listed
         .get("accounts")
@@ -223,12 +242,16 @@ fn device_round() -> Result<String, String> {
         .and_then(|x| x.get("id").and_then(Value::as_str))
         .ok_or("the manager lists no device account")?
         .to_string();
-    let intent = json!({ "address": address, "purpose": "Doc-test: sign on a device",
-                         "legs": [{ "kind": "message", "text": "Signed on the device" }] });
+    Ok(address)
+}
+
+/// Ask for a message signed by `address`, and press the device's button once it is `signing`.
+fn sign_on_device(address: &str, purpose: &str, text: &str, marker: &str) -> Result<String, String> {
+    let intent = json!({ "address": address, "purpose": purpose, "legs": [{ "kind": "message", "text": text }] });
     let v = ok_value(modules().signer_manager_module.request_approval(&intent.to_string()))?;
     let field = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
     let (handle, receipt) = (field("handle"), field("receipt"));
-    println!("{MARK}_REQUESTED_DEVICE: {handle}");
+    println!("{MARK}_{marker}: {handle}");
     let mut pressed = false;
     for _ in 0..600 {
         std::thread::sleep(Duration::from_millis(250));
@@ -421,7 +444,13 @@ fn drive(state: Shared) {
                     println!("{MARK}_ERROR: Bitcoin rounds: {e}");
                 }
                 match device_round() {
-                    Ok(sig) => println!("{MARK}_DEVICE_SIGNED: {sig}"),
+                    Ok((device, sig)) => {
+                        println!("{MARK}_DEVICE_SIGNED: {sig}");
+                        match chosen_round(&device) {
+                            Ok(sig) => println!("{MARK}_CHOSEN_SIGNED: {sig}"),
+                            Err(e) => println!("{MARK}_ERROR: chosen round: {e}"),
+                        }
+                    }
                     Err(e) => println!("{MARK}_ERROR: device round: {e}"),
                 }
             }

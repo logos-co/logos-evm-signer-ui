@@ -31,6 +31,15 @@
       inputs.logos-package-manager.follows = "";
     };
 
+    # OPTIONAL too: a QR wallet's request is drawn here, where it was approved, not in a window of
+    # its own. The scanner hands over the codes to show and whether one is in view, never a
+    # picture, and only to this app. On its own module-builder until this app's passes builder#276
+    # (postFixup, which it packages with): only its contract is consumed here.
+    qr_scanner_module = {
+      url = "github:logos-co/logos-qr-scanner-module";
+      inputs.logos-module-builder.url = "github:logos-co/logos-module-builder";
+    };
+
     # Offline calldata decoding, linked in as a static archive. A library, not a
     # module: nothing is asked of the network, so the TIERS the human reads still
     # depend on this plugin alone.

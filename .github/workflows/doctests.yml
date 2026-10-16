@@ -72,7 +72,7 @@ jobs:
           if grep -q "SKIP" /tmp/probe.log; then
             echo "::error::the view probe skipped instead of running"; exit 1
           fi
-          for probe in probe_intents probe_sections probe_unlock_link; do
+          for probe in probe_intents probe_qr probe_sections probe_unlock_link; do
             grep -q -- "--- $probe.qml" /tmp/probe.log \
               || { echo "::error::probe never ran: $probe"; exit 1; }
           done
@@ -80,12 +80,12 @@ jobs:
           # reaches its last phase prints a RESULT. Assert both that and a floor on the
           # assertions, so a file that stops asserting cannot pass by staying quiet.
           r=$(grep -c "RESULT: ALL PASS" /tmp/probe.log)
-          [ "$r" -ge 3 ] || { echo "::error::only $r probe(s) signed off"; exit 1; }
+          [ "$r" -ge 4 ] || { echo "::error::only $r probe(s) signed off"; exit 1; }
           if grep -q "RESULT: FAILURES" /tmp/probe.log; then
             echo "::error::a probe reported failures"; exit 1
           fi
           n=$(grep -c "  PASS  " /tmp/probe.log)
-          echo "assertions: $n"; [ "$n" -ge 67 ]
+          echo "assertions: $n"; [ "$n" -ge 91 ]
 
   doctests:
     name: evm-signer-ui doc-tests (${{ matrix.os }})

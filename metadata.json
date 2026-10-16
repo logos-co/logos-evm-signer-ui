@@ -20,7 +20,11 @@
       "name": "token_list_module",
       "version": "~0.1.0"
     },
-    "package_manager"
+    "package_manager",
+    {
+      "name": "qr_scanner_module",
+      "version": "~0.1.0"
+    }
   ],
   "uses": [
     {

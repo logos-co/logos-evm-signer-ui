@@ -119,6 +119,23 @@ Item {
     readonly property var unattended: {
         try { return JSON.parse(backend ? backend.unattendedJson : "[]") } catch (e) { return [] }
     }
+    // A QR wallet's request, once approved: drawn here, where it was approved, as the codes that
+    // carry it to the wallet; then how the camera reads its answer. No picture comes here.
+    readonly property var qr: {
+        try { return JSON.parse(backend ? backend.qrJson : "{}") } catch (e) { return ({}) }
+    }
+    readonly property var qrFrames: {
+        try { return JSON.parse(backend ? backend.qrFramesJson : "[]") } catch (e) { return [] }
+    }
+    readonly property bool qrDrawing: showing && backend.renderedSigning === true && qr.active === true
+    property int qrIndex: 0
+    onQrFramesChanged: qrIndex = 0
+    Timer {
+        interval: Math.max(50, root.qr.interval_ms || 200)
+        running: root.qrDrawing && root.qr.step === "show" && root.qrFrames.length > 1
+        repeat: true
+        onTriggered: root.qrIndex = (root.qrIndex + 1) % root.qrFrames.length
+    }
     // The same words as evm_signer_cli's `signer:` line: one request reads alike on both.
     readonly property string signerLine: {
         if (!showing || backend.renderedSigner === "") return ""
@@ -365,12 +382,105 @@ Item {
 
             LogosText {
                 objectName: "deviceWaiting"
-                visible: root.showing && backend.renderedSigning === true
+                visible: root.showing && backend.renderedSigning === true && !root.qrDrawing
+                         && root.qr.in_window !== true
                 Layout.fillWidth: true
                 text: "Approved here. Now confirm on the device: this request stays until it answers."
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
                 color: Theme.palette.textSecondary
+            }
+
+            LogosText {
+                objectName: "qrInWindow"
+                visible: root.showing && backend.renderedSigning === true && root.qr.in_window === true
+                Layout.fillWidth: true
+                text: "Approved here. Continue in the Logos QR window: it showed this request before this app could."
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                color: Theme.palette.textSecondary
+            }
+
+            ColumnLayout {
+                objectName: "qrPanel"
+                visible: root.qrDrawing
+                Layout.fillWidth: true
+                spacing: 8
+
+                LogosText {
+                    objectName: "qrHint"
+                    Layout.fillWidth: true
+                    text: root.qr.hint || ""
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                }
+
+                // Dark modules on white whatever the theme, with the quiet zone a reader needs, and
+                // whole pixels a module so the edges stay sharp.
+                Canvas {
+                    id: qrCanvas
+                    objectName: "qrCode"
+                    visible: root.qr.step === "show" && root.qrFrames.length > 0
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: 420
+                    Layout.preferredHeight: 420
+                    property var frame: root.qrFrames.length > 0
+                                        ? root.qrFrames[root.qrIndex % root.qrFrames.length] : null
+                    onFrameChanged: requestPaint()
+                    onVisibleChanged: requestPaint()
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.fillStyle = "#ffffff"
+                        ctx.fillRect(0, 0, width, height)
+                        if (!frame) return
+                        var quiet = 4
+                        var side = Math.min(width, height)
+                        var m = Math.floor(side / (frame.size + 2 * quiet))
+                        var off = Math.floor((side - m * frame.size) / 2)
+                        ctx.fillStyle = "#000000"
+                        for (var y = 0; y < frame.size; y++) {
+                            for (var x = 0; x < frame.size; x++) {
+                                if (frame.bits.charAt(y * frame.size + x) === "1")
+                                    ctx.fillRect(off + x * m, off + y * m, m, m)
+                            }
+                        }
+                    }
+                }
+
+                LogosText {
+                    objectName: "qrCamera"
+                    visible: root.qr.step === "scan"
+                    Layout.fillWidth: true
+                    text: root.qr.seeing === true
+                          ? "A code is in view: hold it steady."
+                          : "No code in view yet: hold the wallet's answer up to the camera."
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                }
+
+                LogosText {
+                    objectName: "qrProgress"
+                    visible: (root.qr.expected || 0) > 0
+                    text: "Read " + (root.qr.received || 0) + " of " + (root.qr.expected || 0) + " parts"
+                    textFormat: Text.PlainText
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    LogosButton {
+                        objectName: "qrStepButton"
+                        visible: (root.qr.label || "") !== ""
+                        text: root.qr.label || ""
+                        onClicked: backend.qrPress()
+                    }
+                    Item { Layout.fillWidth: true }
+                    LogosButton {
+                        objectName: "qrCancelButton"
+                        text: "Cancel"
+                        onClicked: backend.qrCancel()
+                    }
+                }
             }
 
             LogosTextField {
@@ -431,6 +541,9 @@ Item {
                     // without deciding leaves the request queued, so the requester is told
                     // the same thing the user just did: not now.
                     onClicked: {
+                        // A QR wallet's codes are drawn only here: leaving stops showing and reading
+                        // them, and so cancels its signature, rather than leave the camera waiting.
+                        if (root.qrDrawing) backend.qrCancel()
                         root.answerIntent(backend.renderedHandle, false, "cancelled")
                         backend.dismiss()
                         pw.text = ""

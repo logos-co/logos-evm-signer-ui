@@ -78,6 +78,13 @@ class EvmSignerUi
     // in C++ so a QML-side edit cannot shorten it.
     PROP(bool dwellElapsed=false READONLY)
 
+    // A QR wallet's request, once approved: the codes that carry it to the wallet, and how its
+    // answer is being read. From qr_scanner_module (OPTIONAL), verbatim: `{ active, step, hint,
+    // label, received, expected, seeing, in_window, interval_ms }`. No picture: `seeing` says only
+    // whether a code is in view. `qrFramesJson` holds the codes, `[{ size, bits }]`, drawn in turn.
+    PROP(QString qrJson="{}" READONLY)
+    PROP(QString qrFramesJson="[]" READONLY)
+
     // Re-read the queue from the signer manager.
     SLOT(void refresh())
     // Re-read what was signed without being shown.
@@ -92,6 +99,10 @@ class EvmSignerUi
     SLOT(bool reject(QString handle))
     // Close the sheet without deciding (the request stays queued).
     SLOT(void dismiss())
+    // The QR wallet's next step: its answer is up (the camera reads), or show the request again.
+    SLOT(bool qrPress())
+    // Stop showing and reading the QR wallet's codes: its signature is cancelled.
+    SLOT(bool qrCancel())
 
     // A request reached a terminal state: `approved`, `rejected` or `cancelled`. Relayed verbatim from
     // the manager's own event, so it fires however the request settled — from this sheet,

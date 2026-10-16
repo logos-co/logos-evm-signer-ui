@@ -3661,17 +3661,16 @@
         "rust-overlay": "rust-overlay_5"
       },
       "locked": {
-        "lastModified": 1792018569,
-        "narHash": "sha256-D2RjKRXlWG6NLId81KWVhnu9NDFypj0drMLDQn7X7VU=",
+        "lastModified": 1792175050,
+        "narHash": "sha256-lc7YecyaGnZgbgfE1LOR0yFpiORYAanZMIsbvKzLPac=",
         "owner": "logos-co",
         "repo": "logos-module-builder",
-        "rev": "ac4ff31674bef3860ef10c2883e719452e573418",
+        "rev": "a0de2d347c8b7c3a1e6ff12f6861edf0f3f716d0",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
         "repo": "logos-module-builder",
-        "rev": "ac4ff31674bef3860ef10c2883e719452e573418",
         "type": "github"
       }
     },
@@ -19871,17 +19870,16 @@
         "logos-module-builder": "logos-module-builder_5"
       },
       "locked": {
-        "lastModified": 1792091567,
-        "narHash": "sha256-yyT5sSuPXWrprf7/4Uj4H0R7XY5rfikcUEfAIsA1nQs=",
+        "lastModified": 1792177170,
+        "narHash": "sha256-ttibWHZ59BtWX9ZnAg0UQo9VEb8Z8yV88H4gEESpCRQ=",
         "owner": "logos-co",
         "repo": "logos-qr-scanner-module",
-        "rev": "20b82258bbe8fce3517230090419bf891fe96123",
+        "rev": "bd5084b7491e3914538099b43d18e7e5e832c771",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
         "repo": "logos-qr-scanner-module",
-        "rev": "20b82258bbe8fce3517230090419bf891fe96123",
         "type": "github"
       }
     },

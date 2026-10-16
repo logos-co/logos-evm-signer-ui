@@ -158,7 +158,7 @@ Item {
             var named = { keycard_shell: "Keycard Shell", ledger: "Ledger", trezor: "Trezor" }
             return (named[h.kind] || h.model || h.signer) + " · USB"
         }
-        if (h.transport === "qr") return "QR · " + (h.model || "wallet")
+        if (h.transport === "qr") return h.model && h.model !== "QR wallet" ? "QR · " + h.model : "QR wallet"
         return h.model || h.signer
     }
     function holderState(h) {

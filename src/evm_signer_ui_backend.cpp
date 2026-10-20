@@ -356,9 +356,12 @@ void EvmSignerUiBackend::refresh()
                                                 : QStringLiteral(": %1").arg(err)));
             setStatusText(QStringLiteral("Signer manager unreachable"));
         }
+        m_errors.pollFailed(lastError().toStdString());
         return;
     }
-    setLastError(QString());
+    if (m_errors.pollRead(lastError().toStdString())) {
+        setLastError(QString());
+    }
     const QJsonArray items = reply.value(QStringLiteral("pending")).toArray();
     setPendingJson(QString::fromUtf8(QJsonDocument(items).toJson(QJsonDocument::Compact)));
     // A confirmation outlives the next poll. Without this the "Approved — …"
@@ -400,8 +403,8 @@ bool EvmSignerUiBackend::acknowledge(QString handle)
 {
     const QJsonObject r = parseObject(modules().signer_manager_module.acknowledge(handle));
     if (!r.value(QStringLiteral("ok")).toBool()) {
-        setLastError(r.value(QStringLiteral("error")).toString(QStringLiteral("could not open that request")));
         clearRendered();
+        setLastError(r.value(QStringLiteral("error")).toString(QStringLiteral("could not open that request")));
         return false;
     }
 
@@ -480,13 +483,29 @@ bool EvmSignerUiBackend::chooseSigner(QString handle, QString signer)
 
 void EvmSignerUiBackend::refreshSigners()
 {
+    QString presence;
+    if (readSigners(&presence)
+        && m_errors.signersRead(lastError().toStdString(), renderedSigner().toStdString(), presence.toStdString())) {
+        setLastError(QString());
+    }
+}
+
+bool EvmSignerUiBackend::readSigners(QString *presence)
+{
     if (renderedHandle().isEmpty() || renderedSigning()) {
-        return;
+        return false;
     }
     const QJsonObject r = parseObject(modules().signer_manager_module.approval_signers(renderedHandle()));
-    if (r.value(QStringLiteral("ok")).toBool() && r.value(QStringLiteral("handle")).toString() == renderedHandle()) {
-        applySigner(r);
+    if (!r.value(QStringLiteral("ok")).toBool() || r.value(QStringLiteral("handle")).toString() != renderedHandle()) {
+        return false;
     }
+    applySigner(r);
+    for (const QJsonValue &v : r.value(QStringLiteral("signers")).toArray()) {
+        if (v.toObject().value(QStringLiteral("signer")).toString() == renderedSigner()) {
+            *presence = v.toObject().value(QStringLiteral("presence")).toString();
+        }
+    }
+    return true;
 }
 
 bool EvmSignerUiBackend::approve(QString handle, QString bundleId, QString password)
@@ -510,6 +529,7 @@ bool EvmSignerUiBackend::approve(QString handle, QString bundleId, QString passw
     const bool ok = r.value(QStringLiteral("ok")).toBool();
     if (ok && r.value(QStringLiteral("state")).toString() == QStringLiteral("signing")) {
         // A device signs in its own time; the manager's settled event ends the sheet.
+        setLastError(QString());
         setRenderedSigning(true);
         if (!m_qrHandle.isEmpty()) {
             setStatusText(QStringLiteral("Show the codes to your QR wallet"));
@@ -561,9 +581,12 @@ bool EvmSignerUiBackend::approve(QString handle, QString bundleId, QString passw
         } else {
             setLastError(QStringLiteral("Could not approve. Check the password and try again."));
         }
-        // A device that went away, or a default that moved: show who would sign now.
+        // A device that went away, or a default that moved: show who would sign now, and keep
+        // the reason up until that signer is back or another one is chosen.
         if (code == QStringLiteral("signer_changed") || code == QStringLiteral("unavailable")) {
-            refreshSigners();
+            QString presence;
+            readSigners(&presence);
+            m_errors.signerRefused(lastError().toStdString(), renderedSigner().toStdString(), presence.toStdString());
         }
         return false;
     }
@@ -666,6 +689,7 @@ bool EvmSignerUiBackend::qrCancel()
 
 void EvmSignerUiBackend::clearRendered()
 {
+    setLastError(QString());
     qrRelease();
     m_dwell.stop();
     setDwellElapsed(false);

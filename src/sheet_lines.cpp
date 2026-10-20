@@ -172,4 +172,35 @@ std::vector<std::string> bitcoinReading(const std::vector<std::string> &lines)
     return r;
 }
 
+
+void ErrorHold::pollFailed(std::string text) { m_poll = std::move(text); }
+
+void ErrorHold::signerRefused(std::string text, std::string chosen, const std::string &presence)
+{
+    m_refused = std::move(text);
+    m_refusedSigner = std::move(chosen);
+    m_refusedAbsent = presence.empty() || presence == "absent";
+}
+
+bool ErrorHold::pollRead(const std::string &shown)
+{
+    const bool own = !m_poll.empty() && shown == m_poll;
+    m_poll.clear();
+    return own;
+}
+
+bool ErrorHold::signersRead(const std::string &shown, const std::string &chosen, const std::string &presence)
+{
+    if (m_refused.empty() || shown != m_refused) {
+        m_refused.clear();
+        return false;
+    }
+    const bool back = m_refusedAbsent && !presence.empty() && presence != "absent";
+    if (chosen == m_refusedSigner && !back) {
+        return false;
+    }
+    m_refused.clear();
+    return true;
+}
+
 } // namespace sheet

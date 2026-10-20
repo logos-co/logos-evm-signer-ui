@@ -18,4 +18,23 @@ std::string installedName(const std::string &module,
 // is not one, so the EVM reading is untouched.
 std::vector<std::string> bitcoinReading(const std::vector<std::string> &lines);
 
+// The errors under the sheet that an event may clear. The once-a-second queue poll clears only its
+// own; a signer's refusal at Approve stays until that signer is back or another one is chosen.
+class ErrorHold
+{
+public:
+    void pollFailed(std::string text);
+    // `chosen` signs after the refusal, and `presence` is how the manager lists it then.
+    void signerRefused(std::string text, std::string chosen, const std::string &presence);
+    // Each answers whether the error `shown` is now over.
+    bool pollRead(const std::string &shown);
+    bool signersRead(const std::string &shown, const std::string &chosen, const std::string &presence);
+
+private:
+    std::string m_poll;
+    std::string m_refused;
+    std::string m_refusedSigner;
+    bool m_refusedAbsent = false;
+};
+
 } // namespace sheet

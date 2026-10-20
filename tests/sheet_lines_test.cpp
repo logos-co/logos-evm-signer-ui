@@ -142,6 +142,53 @@ int main()
     check("two copies that agree keep the name",
           installedName("some_module", {{"some_module", "Wallet"}, {"some_module", "Wallet"}}), "Wallet");
 
+    std::cout << "\nthe error under the sheet: what the poll and a signer change may clear\n";
+    auto over = [](bool ends) { return std::string(ends ? "cleared" : "kept"); };
+    const std::string unplugged = "Unavailable: Keycard Shell isn't connected";
+    const std::string shell = "keycard_shell_module";
+    {
+        sheet::ErrorHold hold;
+        hold.pollFailed("Could not reach the signer manager.");
+        check("the poll's own error, once the queue reads again",
+              over(hold.pollRead("Could not reach the signer manager.")), "cleared");
+    }
+    {
+        sheet::ErrorHold hold;
+        hold.signerRefused(unplugged, shell, "absent");
+        check("a device's refusal, on every poll after it", over(hold.pollRead(unplugged)) + " "
+              + over(hold.pollRead(unplugged)), "kept kept");
+        check("...while the device stays unplugged", over(hold.signersRead(unplugged, shell, "absent")), "kept");
+        check("...until it is plugged in again", over(hold.signersRead(unplugged, shell, "connected")), "cleared");
+    }
+    {
+        sheet::ErrorHold hold;
+        hold.signerRefused(unplugged, shell, "absent");
+        check("...or another signer is chosen", over(hold.signersRead(unplugged, "keystore_module", "local")),
+              "cleared");
+    }
+    {
+        sheet::ErrorHold hold;
+        hold.signerRefused("The signer changed: approve again", "keystore_module", "local");
+        check("a default that moved, while it stays", over(hold.signersRead("The signer changed: approve again",
+                                                                            "keystore_module", "local")),
+              "kept");
+    }
+    {
+        sheet::ErrorHold hold;
+        hold.pollFailed("Could not reach the signer manager.");
+        check("a poll error that Approve's error replaced: the poll leaves it",
+              over(hold.pollRead("Could not approve. Check the password and try again.")), "kept");
+    }
+    {
+        sheet::ErrorHold hold;
+        hold.signerRefused(unplugged, shell, "absent");
+        check("a refusal already cleared by a choice: the next read ends nothing",
+              over(hold.signersRead("", "keystore_module", "local")), "kept");
+        check("...nor holds a later error", over(hold.signersRead("Could not sign with that signer.", shell,
+                                                                  "connected")),
+              "kept");
+    }
+
     std::cout << "\n" << (failures ? "RESULT: FAILURES" : "RESULT: ALL PASS") << "\n";
     return failures ? 1 : 0;
 }

@@ -9,6 +9,7 @@
 
 #include "rep_evm_signer_ui_source.h"
 #include "logos_ui_plugin_context.h"
+#include "sheet_lines.h"
 
 struct LogosTxDecoder;
 
@@ -53,6 +54,8 @@ private:
     void applySigner(const QJsonObject &r);
     /// Read the signers again: one was plugged in or out, or the default moved.
     void refreshSigners();
+    /// The manager's signers for the request on screen, applied; `presence` is the chosen one's.
+    bool readSigners(QString *presence);
     /// Decode the calldata in `lines`. Empty on any failure — the verbatim
     /// lines are complete on their own, so a decoder problem must not surface
     /// as an approval problem.
@@ -90,6 +93,9 @@ private:
 
     /// Until when an "Approved" confirmation outranks the queue status.
     QDateTime m_confirmUntil;
+
+    /// Which error under the sheet the poll or a signer change may clear.
+    sheet::ErrorHold m_errors;
 
     // Guards against a render painted into a hidden or just-appeared sheet
     // being approved by a click that was already travelling.

@@ -121,7 +121,9 @@ USB, a QR wallet), the line becomes "Sign with": one row per signer, in the mana
   request, such as a bare digest on a device that shows what it signs.
 - When the manager announces that accounts changed, the rows are read again (`approval_signers`).
   At Approve, a chosen device that went away, or a default that moved, is the manager's own
-  message, never "check the password". The request stays on screen.
+  message, never "check the password". The request stays on screen, and so does the message,
+  until that signer is back, another one is chosen, an approval goes through, or the request
+  leaves. The queue poll clears only an error it set itself.
 
 The password field shows only when a secret is needed, and Approve then sends an empty one. The
 manager decides: an approval with no secret signs only inside an unlock that still covers the

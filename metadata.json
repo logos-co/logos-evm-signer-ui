@@ -5,7 +5,7 @@
   "type": "ui_qml",
   "interface": "universal",
   "category": "wallet",
-  "description": "The signing approval surface: shows what a module asked to sign, in the signer manager's own words, and takes the vault password.",
+  "description": "The signing approval surface, and where wallets are unlocked: shows what a module asked to sign, in the signer manager's own words, and unlocks each wallet once per session for every app.",
   "main": "evm_signer_ui_plugin",
   "icon": "src/icons/signer.png",
   "view": "qml/SignerView.qml",
@@ -32,6 +32,23 @@
     }
   ],
   "provides": [
+    {
+      "intent": "logos.unlock",
+      "params": [
+        {
+          "name": "seeds",
+          "type": "array",
+          "required": false,
+          "description": "The wallets (the signer manager's seed ids) the app needs unlocked; the first locked one is shown"
+        },
+        {
+          "name": "openHandle",
+          "type": "string",
+          "required": false,
+          "description": "An open the app asked the signer manager for: shown beside its wallet, for the person's consent"
+        }
+      ]
+    },
     {
       "intent": "evm.signing.approve",
       "params": [

@@ -113,6 +113,62 @@ class EvmSignerUi
     // Stop showing and reading the QR wallet's codes: its signature is cancelled.
     SLOT(bool qrCancel())
 
+    // ── Wallets: each unlocked once per session here, for every app ─────
+    //
+    // A wallet is a seed, whichever signers hold it. This app is where it is unlocked, by its
+    // device, a password or both as its rule says, and where its rule, the named passwords and its
+    // names are kept. Passwords and PINs cross here for the same reason the vault password does
+    // above: this QML and this backend are one trust unit, and only the backend talks to the manager.
+
+    // The manager's `wallet_settings`, verbatim: `{ wallets: [{ seed, name, privateName?, locked,
+    // holders, index, generation, ways: [{ id, factors }], origin?, birthday? }], passwords: [{ id,
+    // name, wallets }] }`.
+    PROP(QString walletsJson="{}" READONLY)
+    // Every account once, verbatim from the manager's `roster`: each names its wallet as `seed`.
+    PROP(QString rosterJson="[]" READONLY)
+    // What went wrong in the Wallets view or the Unlock sheet, apart from the request on screen.
+    PROP(QString walletError="" READONLY)
+    // The device step under way, from `unlock_progress`: `{ handle, seed, holder, state, step?,
+    // code?, error? }`, `state` one of `device`, `needs_password`, `done`, `failed`; `{}` when none.
+    PROP(QString unlockJson="{}" READONLY)
+    // Opens waiting for the person's consent: `[{ handle, requester, kind, state, ageMs }]`.
+    PROP(QString opensJson="[]" READONLY)
+    // The open shown beside its wallet: the manager's `acknowledge_access` reply, verbatim; `{}`.
+    PROP(QString openJson="{}" READONLY)
+
+    // Read the wallets, the accounts and the opens waiting again.
+    SLOT(void refreshWallets())
+    // Unlock a wallet by one of its ways in. `holder` is the signer module to ask when the way
+    // takes the device (empty: the first), `secret` its PIN or password, `passwordsJson` `{ id:
+    // password }` for the named passwords the way takes. True once unlocked, or while a device works.
+    SLOT(bool unlockWallet(QString seed, QString way, QString holder, QString secret, QString passwordsJson))
+    // Type the way's passwords again, after the device answered and a password didn't.
+    SLOT(bool retryUnlock(QString passwordsJson))
+    // Stop the device step: the holder stops asking.
+    SLOT(bool cancelUnlock())
+    // `["s_…"]`, or `[]` for every wallet.
+    SLOT(bool lockWallets(QString seedsJson))
+    // A wallet's ways in, `[["device"], ["password:p_…"]]`, with what a new way needs.
+    SLOT(bool setRule(QString seed, QString waysJson, QString holder, QString secret, QString passwordsJson))
+    // New keys for a wallet; `newIndex` also moves it to its next unlock key.
+    SLOT(bool changeKeys(QString seed, bool newIndex, QString holder, QString secret, QString passwordsJson))
+    // A wallet's public name, and its private one (empty clears it).
+    SLOT(bool setNames(QString seed, QString name, QString privateName))
+    // A new named password: its id, or empty when refused.
+    SLOT(QString createPassword(QString name, QString password))
+    SLOT(bool renamePassword(QString id, QString name))
+    SLOT(bool changePassword(QString id, QString oldPassword, QString newPassword))
+    SLOT(bool removePassword(QString id))
+    // Show an open waiting for consent beside its wallet, give consent, or refuse it.
+    SLOT(bool showOpen(QString handle))
+    SLOT(bool consentOpen(QString handle, QString bundleId, QString group))
+    SLOT(bool rejectOpen(QString handle))
+
+    // A device step ended: the wallet is unlocked (or the rule or keys changed), or it isn't.
+    SIGNAL(unlockEnded(QString seed, bool ok))
+    // An open shown here was settled, however.
+    SIGNAL(openSettled(QString handle, QString state))
+
     // A request reached a terminal state: `approved`, `rejected` or `cancelled`. Relayed verbatim from
     // the manager's own event, so it fires however the request settled — from this sheet,
     // from the queue by hand, or from a surface that is not this one at all.

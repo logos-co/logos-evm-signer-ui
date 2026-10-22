@@ -53,7 +53,7 @@ Item {
     property string unlockOpen: ""
     property string ruleSeed: ""
     property string ruleMode: "rule"
-    // The `logos.unlock` intent being serviced, ended when the wallet unlocks or the sheet closes.
+    // The `wallets.unlock` intent being serviced, ended when the wallet unlocks or the sheet closes.
     property string unlockIntent: ""
     function parsed(raw, empty) {
         try { return JSON.parse(raw) } catch (e) { return empty }
@@ -76,7 +76,7 @@ Item {
         root.ruleSeed = seed
         ruleSheet.reset()
     }
-    // What a `logos.unlock` asks for: the wallet an open names, else the first locked wallet it
+    // What a `wallets.unlock` asks for: the wallet an open names, else the first locked wallet it
     // lists, else the first locked wallet.
     function unlockTarget(params) {
         var ws = root.parsed(backend.walletsJson, ({})).wallets || []
@@ -106,7 +106,7 @@ Item {
         }
 
         function onIntentRequested(requestId, intent, params, requesterName) {
-            if (intent === "logos.unlock") {
+            if (intent === "wallets.unlock") {
                 // One at a time: a second ask while the sheet is up ends the first as displaced.
                 if (root.unlockIntent !== "") logos.respond(root.unlockIntent, false, ({}), "cancelled")
                 var seed = root.ready ? root.unlockTarget(params || {}) : ""

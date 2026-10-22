@@ -10,7 +10,7 @@ account's signer (`keystore_module` for keys kept in files) sign once it approve
 It is also where wallets are unlocked. A wallet, a seed whichever signers hold it, is unlocked
 here once per session for every app: by its device, a password, or both, as its rule says. The
 Wallets tab keeps each wallet's names, rule and named passwords, locks it, and gives it new keys.
-An app that needs a locked wallet raises `logos.unlock`, and an app's request to open a wallet is
+An app that needs a locked wallet raises `wallets.unlock`, and an app's request to open a wallet is
 shown beside it for the person's consent. See `docs/specs.md`.
 
 It is wallet-agnostic by construction — its only REQUIRED dependency is

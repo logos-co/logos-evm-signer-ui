@@ -190,7 +190,7 @@ each device's own app.
 - **New keys** wrap every way in again, so they need each way's factors; an option also moves to
   the device's next unlock key, for when a QR wallet's answer may have been photographed.
 - **Lock** locks one wallet, **Lock all** every wallet.
-- **`logos.unlock`** (`{ seeds?, openHandle? }`) opens the sheet for the wallet an open names,
+- **`wallets.unlock`** (`{ seeds?, openHandle? }`) opens the sheet for the wallet an open names,
   else the first locked one of `seeds`, else the first locked wallet. It is answered `ok` once
   that wallet unlocks (or, with an open, once the open settles approved), and `cancelled` when the
   person closes the sheet; a second ask displaces the first.

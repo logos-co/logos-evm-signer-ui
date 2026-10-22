@@ -1,7 +1,7 @@
 // The Wallets view and the Unlock sheet, LOADED and DRIVEN, with no shell, no host and no
 // signer manager: what each wallet says, what unlocking asks for by its rule and holder, a
 // password typed again after the device answered, an app's open shown beside its wallet, a rule
-// change with a new password, and the `logos.unlock` intent ending once the wallet unlocks.
+// change with a new password, and the `wallets.unlock` intent ending once the wallet unlocks.
 import QtQuick
 
 Item {
@@ -305,14 +305,14 @@ Item {
     function assertTheUnlockIntentEndsOnceTheWalletUnlocks() {
         console.log("")
         console.log("an app asks to unlock a wallet: the sheet opens for it, and the ask ends once it's unlocked")
-        shell.intentRequested("req-u", "logos.unlock", { seeds: ["s_qr"] }, "eth_wallet_ui")
+        shell.intentRequested("req-u", "wallets.unlock", { seeds: ["s_qr"] }, "eth_wallet_ui")
         check("the sheet is up for that wallet", probe.sheet().visible && probe.sheet().seed === "s_qr", true)
         check("nothing answered yet", probe.responses.length, 0)
         fake.unlockEnded("s_qr", true)
         check("answered once unlocked", probe.responses.length === 1 && probe.responses[0].ok === true, true)
         check("...and the sheet goes", probe.sheet().visible, false)
 
-        shell.intentRequested("req-v", "logos.unlock", {}, "eth_wallet_ui")
+        shell.intentRequested("req-v", "wallets.unlock", {}, "eth_wallet_ui")
         probe.click("unlockClose")
         check("closed without unlocking: cancelled", probe.responses.length === 2 && probe.responses[1].error === "cancelled", true)
     }

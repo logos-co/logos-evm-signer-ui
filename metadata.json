@@ -33,7 +33,7 @@
   ],
   "provides": [
     {
-      "intent": "logos.unlock",
+      "intent": "wallets.unlock",
       "params": [
         {
           "name": "seeds",

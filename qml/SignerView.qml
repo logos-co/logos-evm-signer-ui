@@ -89,6 +89,10 @@ Item {
             if (ws[j].locked && (asked.length === 0 || asked.indexOf(ws[j].seed) >= 0)) return ws[j].seed
         return asked.length > 0 ? asked[0] : ""
     }
+    function isUnlocked(seed) {
+        var ws = root.parsed(backend.walletsJson, ({})).wallets || []
+        return ws.some(function (w) { return w.seed === seed && w.locked === false })
+    }
 
     function answerIntent(handle, ok, error) {
         var id = root.intentByHandle[handle]
@@ -112,6 +116,11 @@ Item {
                 var seed = root.ready ? root.unlockTarget(params || {}) : ""
                 if (seed === "") {
                     logos.respond(requestId, false, ({}), "bad_request")
+                    return
+                }
+                // Already unlocked, and no open to consent to: nothing to ask the person.
+                if (!(params || {}).openHandle && root.isUnlocked(seed)) {
+                    logos.respond(requestId, true, ({}), "")
                     return
                 }
                 root.unlockIntent = requestId
@@ -765,7 +774,8 @@ Item {
         backend: root.ready ? root.backend : null
         seed: root.unlockSeed
         openHandle: root.unlockOpen
-        onClosed: root.closeUnlock(false)
+        // Closed once the wallet is unlocked, by any way, and no open waits: the ask is met.
+        onClosed: root.closeUnlock(unlockSheet.unlocked && root.unlockOpen === "")
     }
     RuleSheet {
         id: ruleSheet

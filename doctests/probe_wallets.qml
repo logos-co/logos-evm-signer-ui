@@ -315,6 +315,16 @@ Item {
         shell.intentRequested("req-v", "wallets.unlock", {}, "eth_wallet_ui")
         probe.click("unlockClose")
         check("closed without unlocking: cancelled", probe.responses.length === 2 && probe.responses[1].error === "cancelled", true)
+
+        probe.setUnlocked("s_card", false)
+        shell.intentRequested("req-w", "wallets.unlock", { seeds: ["s_card"] }, "eth_wallet_ui")
+        check("a wallet already unlocked: ok at once", probe.responses.length === 3 && probe.responses[2].ok === true, true)
+        check("...with no sheet", probe.sheet().visible, false)
+
+        shell.intentRequested("req-x", "wallets.unlock", { seeds: ["s_qr"] }, "eth_wallet_ui")
+        probe.setUnlocked("s_qr", false)
+        probe.click("unlockClose")
+        check("unlocked another way, then closed: ok", probe.responses.length === 4 && probe.responses[3].ok === true, true)
     }
 
     Loader {

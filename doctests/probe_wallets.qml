@@ -356,6 +356,18 @@ Item {
         check("closed after one: ok, the first stays unlocked", probe.responses.length === 2 && probe.responses[1].ok === true, true)
 
         probe.setUnlocked("s_card", true)
+        probe.setUnlocked("s_qr", true)
+        shell.intentRequested("req-skip-one", "wallets.unlock", {}, "evm_keystore_ui")
+        check("a wallet that can't be unlocked now can be skipped", probe.visibleAll("unlockSkip").length, 1)
+        probe.click("unlockSkip")
+        check("...on to the next", probe.sheet().visible && probe.sheet().seed === "s_qr", true)
+        check("...the last has no skip", probe.visibleAll("unlockSkip").length, 0)
+        probe.setUnlocked("s_qr", false)
+        fake.unlockEnded("s_qr", true)
+        check("answered ok once the rest unlock", probe.responses.length === 3 && probe.responses[2].ok === true, true)
+        probe.responses = probe.responses.slice(0, 2)
+
+        probe.setUnlocked("s_card", true)
         probe.setUnlocked("s_qr", false)
         shell.intentRequested("req-skip", "wallets.unlock", {}, "evm_keystore_ui")
         check("only the locked ones", probe.sheet().seed === "s_card" && probe.find(view.item, "unlockAfter").visible === false, true)

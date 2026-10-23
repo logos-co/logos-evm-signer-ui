@@ -194,7 +194,8 @@ each device's own app.
   else for each locked one of `seeds`, or each locked wallet when it names none, one after another
   in the wallets' order. It is answered `ok` once the last unlocks (or, with an open, once the open
   settles approved), `ok` too when the person closes the sheet after unlocking at least one, and
-  `cancelled` when they close it having unlocked none; a second ask displaces the first.
+  `cancelled` when they close it having unlocked none; a second ask displaces the first. **Skip**
+  leaves the wallet on screen locked and goes on to the next, for one whose device is not at hand.
 
 Passwords and PINs cross from this QML to this backend for the same reason the vault password does:
 the two are one trust unit, and only the backend talks to the manager. The backend sends them in

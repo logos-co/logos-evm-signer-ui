@@ -17,6 +17,8 @@ Rectangle {
     // How many more wallets the ask that brought the person here unlocks after this one.
     property int after: 0
     signal closed()
+    // Leave this wallet locked and go on to the next one asked for.
+    signal skipped()
 
     color: Theme.palette.background
     border.color: "#8888aa"
@@ -268,6 +270,17 @@ Rectangle {
                     inputs.clear()
                     retype.clear()
                     sheet.closed()
+                }
+            }
+            LogosButton {
+                objectName: "unlockSkip"
+                visible: sheet.after > 0 && !sheet.unlocked
+                text: "Skip"
+                onClicked: {
+                    if (sheet.working || sheet.retyping) sheet.backend.cancelUnlock()
+                    inputs.clear()
+                    retype.clear()
+                    sheet.skipped()
                 }
             }
             Item { Layout.fillWidth: true }

@@ -801,6 +801,11 @@ Item {
         after: root.unlockQueue.length
         // Closed once the wallet is unlocked, by any way, and no open waits: the ask is met.
         onClosed: root.closeUnlock(unlockSheet.unlocked && root.unlockOpen === "")
+        onSkipped: {
+            var next = root.nextQueued()
+            if (next !== "") root.unlockSeed = next
+            else root.closeUnlock(false)
+        }
     }
     RuleSheet {
         id: ruleSheet

@@ -51,10 +51,13 @@ ColumnLayout {
         if (ways.length === 0) return "No way in yet: set a password, or it can't be unlocked after a restart."
         return "Unlocks with " + ways.join(", or ") + "."
     }
-    function accountLine(a) {
-        var name = a.label || (a.address ? a.address : a.key)
+    // An account's own name, never its wallet's, then where it is: its address, or a Bitcoin
+    // account's path and network, so mainnet and test accounts of one index tell apart.
+    function accountLine(a, wallet) {
         var family = a.family === "evm" ? "Ethereum" : a.family === "bitcoin" ? "Bitcoin" : a.family === "bitcoin_taproot" ? "Bitcoin taproot" : a.family
-        return family + " · " + name
+        var own = a.label && a.label !== wallet ? a.label : ""
+        var where = a.address || (a.path ? a.path + (a.chain === "test" ? " · test networks" : "") : a.key)
+        return family + " · " + (own ? own + " · " : "") + where
     }
 
     property string editing: ""
@@ -165,7 +168,7 @@ ColumnLayout {
                             delegate: LogosText {
                                 objectName: "walletAccount"
                                 Layout.fillWidth: true
-                                text: view.accountLine(modelData)
+                                text: view.accountLine(modelData, card.w.name)
                                 textFormat: Text.PlainText
                                 elide: Text.ElideMiddle
                                 color: Theme.palette.textSecondary

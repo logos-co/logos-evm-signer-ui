@@ -39,7 +39,7 @@
           "name": "seeds",
           "type": "array",
           "required": false,
-          "description": "The wallets (the signer manager's seed ids) the app needs unlocked; the first locked one is shown"
+          "description": "The wallets (the signer manager's seed ids) the app needs unlocked; each locked one is shown in turn, or every locked wallet when absent"
         },
         {
           "name": "openHandle",

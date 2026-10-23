@@ -191,9 +191,10 @@ each device's own app.
   the device's next unlock key, for when a QR wallet's answer may have been photographed.
 - **Lock** locks one wallet, **Lock all** every wallet.
 - **`wallets.unlock`** (`{ seeds?, openHandle? }`) opens the sheet for the wallet an open names,
-  else the first locked one of `seeds`, else the first locked wallet. It is answered `ok` once
-  that wallet unlocks (or, with an open, once the open settles approved), and `cancelled` when the
-  person closes the sheet; a second ask displaces the first.
+  else for each locked one of `seeds`, or each locked wallet when it names none, one after another
+  in the wallets' order. It is answered `ok` once the last unlocks (or, with an open, once the open
+  settles approved), `ok` too when the person closes the sheet after unlocking at least one, and
+  `cancelled` when they close it having unlocked none; a second ask displaces the first.
 
 Passwords and PINs cross from this QML to this backend for the same reason the vault password does:
 the two are one trust unit, and only the backend talks to the manager. The backend sends them in

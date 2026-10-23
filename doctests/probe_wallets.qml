@@ -327,6 +327,42 @@ Item {
         check("unlocked another way, then closed: ok", probe.responses.length === 4 && probe.responses[3].ok === true, true)
     }
 
+    function assertTheUnlockIntentWalksEveryLockedWallet() {
+        console.log("")
+        console.log("an app asks to unlock every locked wallet: the sheet takes them one after another")
+        probe.responses = []
+        probe.setUnlocked("s_card", true)
+        probe.setUnlocked("s_qr", true)
+        shell.intentRequested("req-all", "wallets.unlock", {}, "evm_keystore_ui")
+        check("the first locked wallet", probe.sheet().visible && probe.sheet().seed === "s_card", true)
+        check("...says one more follows", probe.find(view.item, "unlockAfter").text, "Then 1 more wallet.")
+        probe.setUnlocked("s_card", false)
+        fake.unlockEnded("s_card", true)
+        check("no answer between wallets", probe.responses.length, 0)
+        check("the sheet moves to the next", probe.sheet().visible && probe.sheet().seed === "s_qr", true)
+        check("...the last", probe.find(view.item, "unlockAfter").visible, false)
+        probe.setUnlocked("s_qr", false)
+        fake.unlockEnded("s_qr", true)
+        check("answered once the last is unlocked", probe.responses.length === 1 && probe.responses[0].ok === true, true)
+        check("...and the sheet goes", probe.sheet().visible, false)
+
+        probe.setUnlocked("s_card", true)
+        probe.setUnlocked("s_qr", true)
+        shell.intentRequested("req-part", "wallets.unlock", { seeds: ["s_qr", "s_card"] }, "bitcoin_wallet_ui")
+        check("wallets in the wallets' order", probe.sheet().seed, "s_card")
+        probe.setUnlocked("s_card", false)
+        fake.unlockEnded("s_card", true)
+        probe.click("unlockClose")
+        check("closed after one: ok, the first stays unlocked", probe.responses.length === 2 && probe.responses[1].ok === true, true)
+
+        probe.setUnlocked("s_card", true)
+        probe.setUnlocked("s_qr", false)
+        shell.intentRequested("req-skip", "wallets.unlock", {}, "evm_keystore_ui")
+        check("only the locked ones", probe.sheet().seed === "s_card" && probe.find(view.item, "unlockAfter").visible === false, true)
+        probe.click("unlockClose")
+        check("closed without unlocking: cancelled", probe.responses[2].error, "cancelled")
+    }
+
     Loader {
         id: view
         anchors.fill: parent
@@ -346,6 +382,7 @@ Item {
             probe.assertARuleWithANewPasswordCreatesItFirst()
             probe.assertLockAllLocksEveryWallet()
             probe.assertTheUnlockIntentEndsOnceTheWalletUnlocks()
+            probe.assertTheUnlockIntentWalksEveryLockedWallet()
 
             console.log("")
             console.log(probe.failures ? "RESULT: FAILURES" : "RESULT: ALL PASS")

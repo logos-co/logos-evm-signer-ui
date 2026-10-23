@@ -14,6 +14,8 @@ Rectangle {
     property string seed: ""
     // The open that brought the person here, if any.
     property string openHandle: ""
+    // How many more wallets the ask that brought the person here unlocks after this one.
+    property int after: 0
     signal closed()
 
     color: Theme.palette.background
@@ -91,6 +93,13 @@ Rectangle {
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             font.bold: true
+        }
+        LogosText {
+            objectName: "unlockAfter"
+            visible: sheet.after > 0
+            Layout.fillWidth: true
+            text: sheet.after === 1 ? "Then 1 more wallet." : "Then " + sheet.after + " more wallets."
+            color: Theme.palette.textSecondary
         }
         LogosText {
             Layout.fillWidth: true

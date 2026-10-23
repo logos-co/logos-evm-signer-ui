@@ -55,6 +55,9 @@ Item {
     property string ruleMode: "rule"
     // The `wallets.unlock` intent being serviced, ended when the wallet unlocks or the sheet closes.
     property string unlockIntent: ""
+    // The wallets that intent still asks for after the one on screen, and whether one unlocked.
+    property var unlockQueue: []
+    property bool unlockedSome: false
     function parsed(raw, empty) {
         try { return JSON.parse(raw) } catch (e) { return empty }
     }
@@ -66,28 +69,42 @@ Item {
     function closeUnlock(ok) {
         root.unlockSeed = ""
         root.unlockOpen = ""
+        // Closing part way still answers ok: the wallets unlocked so far stay unlocked.
+        ok = ok || root.unlockedSome
+        root.unlockQueue = []
+        root.unlockedSome = false
         if (root.unlockIntent !== "") {
             logos.respond(root.unlockIntent, ok, ({}), ok ? "" : "cancelled")
             root.unlockIntent = ""
         }
+    }
+    // The next wallet the intent asks for that is still locked, taken off the queue.
+    function nextQueued() {
+        var q = root.unlockQueue.slice()
+        while (q.length > 0) {
+            var s = q.shift()
+            if (!root.isUnlocked(s)) { root.unlockQueue = q; return s }
+        }
+        root.unlockQueue = []
+        return ""
     }
     function openRule(seed, mode) {
         root.ruleMode = mode
         root.ruleSeed = seed
         ruleSheet.reset()
     }
-    // What a `wallets.unlock` asks for: the wallet an open names, else the first locked wallet it
-    // lists, else the first locked wallet.
-    function unlockTarget(params) {
+    // What a `wallets.unlock` asks for, in order: the wallet an open names; else every locked
+    // wallet it lists, or every locked wallet when it lists none; else the first it lists.
+    function unlockTargets(params) {
         var ws = root.parsed(backend.walletsJson, ({})).wallets || []
         var opens = root.parsed(backend.opensJson, [])
         if (params.openHandle)
             for (var i = 0; i < opens.length; i++)
-                if (opens[i].handle === params.openHandle && opens[i].seed) return opens[i].seed
+                if (opens[i].handle === params.openHandle && opens[i].seed) return [opens[i].seed]
         var asked = params.seeds || []
-        for (var j = 0; j < ws.length; j++)
-            if (ws[j].locked && (asked.length === 0 || asked.indexOf(ws[j].seed) >= 0)) return ws[j].seed
-        return asked.length > 0 ? asked[0] : ""
+        var locked = ws.filter(function (w) { return w.locked && (asked.length === 0 || asked.indexOf(w.seed) >= 0) })
+                       .map(function (w) { return w.seed })
+        return locked.length > 0 ? locked : asked.slice(0, 1)
     }
     function isUnlocked(seed) {
         var ws = root.parsed(backend.walletsJson, ({})).wallets || []
@@ -113,7 +130,8 @@ Item {
             if (intent === "wallets.unlock") {
                 // One at a time: a second ask while the sheet is up ends the first as displaced.
                 if (root.unlockIntent !== "") logos.respond(root.unlockIntent, false, ({}), "cancelled")
-                var seed = root.ready ? root.unlockTarget(params || {}) : ""
+                var targets = root.ready ? root.unlockTargets(params || {}) : []
+                var seed = targets.length > 0 ? targets[0] : ""
                 if (seed === "") {
                     logos.respond(requestId, false, ({}), "bad_request")
                     return
@@ -124,6 +142,8 @@ Item {
                     return
                 }
                 root.unlockIntent = requestId
+                root.unlockQueue = targets.slice(1)
+                root.unlockedSome = false
                 root.openUnlock(seed, (params || {}).openHandle || "")
                 return
             }
@@ -160,11 +180,15 @@ Item {
         }
         function onRenderedHandleChanged() { root.unlockNote = "" }
         // The sheet's step ended: the rule or keys sheet closes once done, and an unlock asked
-        // for by an intent ends once the wallet is unlocked and no open waits beside it.
+        // for by an intent moves to the next wallet it asks for, or ends once the last is unlocked
+        // and no open waits beside it.
         function onUnlockEnded(seed, ok) {
             if (ok && seed === root.ruleSeed) root.ruleSeed = ""
-            if (ok && seed === root.unlockSeed && root.unlockOpen === "" && root.unlockIntent !== "")
-                root.closeUnlock(true)
+            if (!ok || seed !== root.unlockSeed || root.unlockOpen !== "" || root.unlockIntent === "") return
+            root.unlockedSome = true
+            var next = root.nextQueued()
+            if (next !== "") root.unlockSeed = next
+            else root.closeUnlock(true)
         }
         function onOpenSettled(handle, state) {
             if (handle === root.unlockOpen) root.closeUnlock(state === "approved")
@@ -774,6 +798,7 @@ Item {
         backend: root.ready ? root.backend : null
         seed: root.unlockSeed
         openHandle: root.unlockOpen
+        after: root.unlockQueue.length
         // Closed once the wallet is unlocked, by any way, and no open waits: the ask is met.
         onClosed: root.closeUnlock(unlockSheet.unlocked && root.unlockOpen === "")
     }

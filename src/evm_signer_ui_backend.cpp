@@ -31,6 +31,10 @@ const QString kQrSigner = QStringLiteral("qr_signer_module");
 /// to keep the scanner's claim (fresh for 10 s) while the request awaits approval.
 constexpr int kQrDrawMs = 150;
 constexpr int kQrHoldMs = 3000;
+/// How often a wallet's device step is read while its holder works.
+constexpr int kUnlockPollMs = 400;
+/// The Wallets view's backstop; events are the fast path.
+constexpr int kWalletsPollMs = 3000;
 
 QJsonObject parseObject(const QString &raw)
 {
@@ -302,12 +306,39 @@ void EvmSignerUiBackend::onContextReady()
     });
     // A device plugged in or out: the request on screen may now be signed by another, off the IPC stack.
     modules().signer_manager_module.onAccounts_changed([this](int) {
-        QTimer::singleShot(0, this, [this] { refreshSigners(); });
+        QTimer::singleShot(0, this, [this] {
+            refreshSigners();
+            refreshWallets();
+        });
+    });
+    // A wallet added, unlocked, locked or changed anywhere, and an open waiting for consent or
+    // ended: read the Wallets view again, off the IPC stack.
+    modules().signer_manager_module.onWallets_changed([this](QString) {
+        QTimer::singleShot(0, this, [this] { refreshWallets(); });
+    });
+    modules().signer_manager_module.onWallets_locked([this](int) {
+        QTimer::singleShot(0, this, [this] { refreshWallets(); });
+    });
+    modules().signer_manager_module.onAccess_requested([this](QString) {
+        QTimer::singleShot(0, this, [this] { refreshWallets(); });
+    });
+    modules().signer_manager_module.onAccess_settled([this](QString handle, QString state) {
+        QTimer::singleShot(0, this, [this, handle, state] {
+            if (parseObject(openJson()).value(QStringLiteral("handle")).toString() == handle) {
+                setOpenJson(QStringLiteral("{}"));
+            }
+            emit openSettled(handle, state);
+            refreshWallets();
+        });
     });
 
+    QObject::connect(&m_unlockPoll, &QTimer::timeout, [this] { unlockPoll(); });
+    QObject::connect(&m_walletsPoll, &QTimer::timeout, [this] { refreshWallets(); });
+    m_walletsPoll.start(kWalletsPollMs);
     m_poll.start(kPollMs);
     refresh();
     refreshUnattended();
+    refreshWallets();
     setStatusText(QStringLiteral("Ready"));
 }
 
@@ -456,7 +487,7 @@ void EvmSignerUiBackend::applySigner(const QJsonObject &r)
     setRenderedSignerExplicit(r.value(QStringLiteral("explicit")).toBool());
     if (renderedSigner() == kQrSigner) {
         qrClaim();
-    } else {
+    } else if (!qrUnlocking()) {
         qrRelease();
     }
 }
@@ -622,7 +653,7 @@ void EvmSignerUiBackend::qrClaim()
         m_qrHandle = h;
         m_qrFramesId.clear();
     }
-    m_qrPoll.start(renderedSigning() ? kQrDrawMs : kQrHoldMs);
+    m_qrPoll.start(renderedSigning() || qrUnlocking() ? kQrDrawMs : kQrHoldMs);
 }
 
 void EvmSignerUiBackend::qrRelease()
@@ -690,7 +721,10 @@ bool EvmSignerUiBackend::qrCancel()
 void EvmSignerUiBackend::clearRendered()
 {
     setLastError(QString());
-    qrRelease();
+    // A QR wallet's unlock drawn here keeps its codes: they are not this request's.
+    if (!qrUnlocking()) {
+        qrRelease();
+    }
     m_dwell.stop();
     setDwellElapsed(false);
     setRenderedHandle(QString());
@@ -716,4 +750,382 @@ void EvmSignerUiBackend::startDwell()
 {
     setDwellElapsed(false);
     m_dwell.start(kDwellMs);
+}
+
+// ── Wallets ─────────────────────────────────────────────────────────────────
+
+namespace {
+
+QString compact(const QJsonObject &o)
+{
+    return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
+}
+
+QString compact(const QJsonArray &a)
+{
+    return QString::fromUtf8(QJsonDocument(a).toJson(QJsonDocument::Compact));
+}
+
+/// The manager's own words where it gave them: they name the wallet or the password.
+QString walletErrorText(const QJsonObject &r, const QString &fallback)
+{
+    const QString why = r.value(QStringLiteral("error")).toString();
+    if (why == QStringLiteral("not authorized")) {
+        return QStringLiteral("This build is not registered as the approver, so it cannot unlock or change wallets.");
+    }
+    return why.isEmpty() ? fallback : why;
+}
+
+} // namespace
+
+bool EvmSignerUiBackend::walletReply(const QString &reply, const QString &fallback)
+{
+    const QJsonObject r = parseObject(reply);
+    if (!r.value(QStringLiteral("ok")).toBool()) {
+        setWalletError(walletErrorText(r, fallback));
+        return false;
+    }
+    setWalletError(QString());
+    return true;
+}
+
+void EvmSignerUiBackend::refreshWallets()
+{
+    if (m_walletsInFlight) {
+        return;
+    }
+    m_walletsInFlight = true;
+    const auto done = qScopeGuard([this] { m_walletsInFlight = false; });
+
+    QJsonObject w = parseObject(modules().signer_manager_module.wallet_settings());
+    if (!w.value(QStringLiteral("ok")).toBool()) {
+        setWalletError(walletErrorText(w, QStringLiteral("Could not read the wallets.")));
+        return;
+    }
+    w.remove(QStringLiteral("ok"));
+    setWalletsJson(compact(w));
+    const QJsonObject r = parseObject(modules().signer_manager_module.roster());
+    if (r.value(QStringLiteral("ok")).toBool()) {
+        setRosterJson(compact(r.value(QStringLiteral("accounts")).toArray()));
+    }
+    const QJsonObject q = parseObject(modules().signer_manager_module.access_requests());
+    if (q.value(QStringLiteral("ok")).toBool()) {
+        QJsonArray opens;
+        for (const QJsonValue &v : q.value(QStringLiteral("requests")).toArray()) {
+            if (v.toObject().value(QStringLiteral("kind")).toString() == QStringLiteral("open")) {
+                opens.append(v);
+            }
+        }
+        setOpensJson(compact(opens));
+    }
+}
+
+bool EvmSignerUiBackend::qrUnlocking() const
+{
+    const QJsonObject u = parseObject(unlockJson());
+    return u.value(QStringLiteral("state")).toString() == QStringLiteral("device")
+           && u.value(QStringLiteral("holder")).toString() == kQrSigner;
+}
+
+bool EvmSignerUiBackend::beginStep(const QString &method, const QString &seed, const QString &holder, QJsonObject body,
+                                   QString secret, QString passwordsJson)
+{
+    const auto wipe = qScopeGuard([&] {
+        secret.fill(QChar(0));
+        passwordsJson.fill(QChar(0));
+    });
+    if (parseObject(unlockJson()).value(QStringLiteral("state")).toString() == QStringLiteral("device")) {
+        setWalletError(QStringLiteral("Finish or cancel the step under way first."));
+        return false;
+    }
+    // The holder asked, so the app knows whether to draw a QR wallet's codes: the person's pick,
+    // else the wallet's first.
+    QString asked = holder;
+    if (asked.isEmpty()) {
+        for (const QJsonValue &v : parseObject(walletsJson()).value(QStringLiteral("wallets")).toArray()) {
+            const QJsonObject w = v.toObject();
+            if (w.value(QStringLiteral("seed")).toString() == seed) {
+                asked = w.value(QStringLiteral("holders")).toArray().first().toObject().value(QStringLiteral("signer")).toString();
+            }
+        }
+    }
+    body.insert(QStringLiteral("seed"), seed);
+    if (!holder.isEmpty()) {
+        body.insert(QStringLiteral("holder"), holder);
+    }
+    if (!secret.isEmpty()) {
+        body.insert(QStringLiteral("secret"), secret);
+    }
+    const QJsonObject passwords = QJsonDocument::fromJson(passwordsJson.toUtf8()).object();
+    if (!passwords.isEmpty()) {
+        body.insert(QStringLiteral("passwords"), passwords);
+    }
+    QString params = compact(body);
+    QString reply;
+    if (method == QStringLiteral("set_rule")) {
+        reply = modules().signer_manager_module.set_rule(params);
+    } else if (method == QStringLiteral("change_keys")) {
+        reply = modules().signer_manager_module.change_keys(params);
+    } else {
+        reply = modules().signer_manager_module.unlock_wallet(params);
+    }
+    params.fill(QChar(0));
+    const QJsonObject r = parseObject(reply);
+    if (!r.value(QStringLiteral("ok")).toBool()) {
+        setWalletError(walletErrorText(r, QStringLiteral("That did not work. Try again.")));
+        refreshWallets();
+        return false;
+    }
+    setWalletError(QString());
+    if (r.value(QStringLiteral("state")).toString() == QStringLiteral("device")) {
+        const QJsonObject step{
+            { QStringLiteral("handle"), r.value(QStringLiteral("handle")).toString() },
+            { QStringLiteral("seed"), seed },
+            { QStringLiteral("holder"), asked },
+            { QStringLiteral("method"), method },
+            { QStringLiteral("state"), QStringLiteral("device") },
+            { QStringLiteral("step"), QStringLiteral("working") },
+        };
+        setUnlockJson(compact(step));
+        if (asked == kQrSigner) {
+            qrClaim();
+        }
+        m_unlockPoll.start(kUnlockPollMs);
+        unlockPoll();
+        return true;
+    }
+    endStep(seed, true);
+    return true;
+}
+
+void EvmSignerUiBackend::unlockPoll()
+{
+    QJsonObject u = parseObject(unlockJson());
+    const QString handle = u.value(QStringLiteral("handle")).toString();
+    if (handle.isEmpty() || u.value(QStringLiteral("state")).toString() != QStringLiteral("device")) {
+        m_unlockPoll.stop();
+        return;
+    }
+    const QJsonObject p = parseObject(modules().signer_manager_module.unlock_progress(handle));
+    if (!p.value(QStringLiteral("ok")).toBool()) {
+        u.insert(QStringLiteral("state"), QStringLiteral("failed"));
+        u.insert(QStringLiteral("error"), QStringLiteral("The signer manager no longer knows this step."));
+        setUnlockJson(compact(u));
+        endStep(u.value(QStringLiteral("seed")).toString(), false);
+        return;
+    }
+    for (const QString &k : { QStringLiteral("state"), QStringLiteral("step"), QStringLiteral("code"), QStringLiteral("error") }) {
+        if (p.contains(k) && !p.value(k).isNull()) {
+            u.insert(k, p.value(k));
+        } else if (k != QStringLiteral("state")) {
+            u.remove(k);
+        }
+    }
+    setUnlockJson(compact(u));
+    const QString state = u.value(QStringLiteral("state")).toString();
+    if (state == QStringLiteral("device")) {
+        return;
+    }
+    m_unlockPoll.stop();
+    if (state == QStringLiteral("needs_password")) {
+        // The device answered; only a password is typed again, so its codes are done here.
+        if (renderedSigner() != kQrSigner) {
+            qrRelease();
+        }
+        return;
+    }
+    endStep(u.value(QStringLiteral("seed")).toString(), state == QStringLiteral("done"));
+}
+
+void EvmSignerUiBackend::endStep(const QString &seed, bool ok)
+{
+    m_unlockPoll.stop();
+    if (renderedSigner() != kQrSigner) {
+        qrRelease();
+    }
+    if (ok) {
+        setUnlockJson(QStringLiteral("{}"));
+    } else {
+        // Kept for the sheet to say why, without a handle: nothing more happens to it.
+        QJsonObject u = parseObject(unlockJson());
+        u.remove(QStringLiteral("handle"));
+        u.insert(QStringLiteral("state"), QStringLiteral("failed"));
+        setUnlockJson(compact(u));
+    }
+    emit unlockEnded(seed, ok);
+    refreshWallets();
+}
+
+bool EvmSignerUiBackend::unlockWallet(QString seed, QString way, QString holder, QString secret, QString passwordsJson)
+{
+    const QJsonObject body{ { QStringLiteral("way"), way } };
+    return beginStep(QStringLiteral("unlock_wallet"), seed, holder, body, secret, passwordsJson);
+}
+
+bool EvmSignerUiBackend::setRule(QString seed, QString waysJson, QString holder, QString secret, QString passwordsJson)
+{
+    const QJsonObject body{ { QStringLiteral("ways"), QJsonDocument::fromJson(waysJson.toUtf8()).array() } };
+    return beginStep(QStringLiteral("set_rule"), seed, holder, body, secret, passwordsJson);
+}
+
+bool EvmSignerUiBackend::changeKeys(QString seed, bool newIndex, QString holder, QString secret, QString passwordsJson)
+{
+    const QJsonObject body{ { QStringLiteral("newIndex"), newIndex } };
+    return beginStep(QStringLiteral("change_keys"), seed, holder, body, secret, passwordsJson);
+}
+
+bool EvmSignerUiBackend::retryUnlock(QString passwordsJson)
+{
+    const auto wipe = qScopeGuard([&] { passwordsJson.fill(QChar(0)); });
+    QJsonObject u = parseObject(unlockJson());
+    const QString handle = u.value(QStringLiteral("handle")).toString();
+    if (handle.isEmpty() || u.value(QStringLiteral("state")).toString() != QStringLiteral("needs_password")) {
+        setWalletError(QStringLiteral("Nothing is waiting for a password."));
+        return false;
+    }
+    const QJsonObject body{
+        { QStringLiteral("handle"), handle },
+        { QStringLiteral("passwords"), QJsonDocument::fromJson(passwordsJson.toUtf8()).object() },
+    };
+    QString params = compact(body);
+    const QJsonObject r = parseObject(modules().signer_manager_module.unlock_wallet(params));
+    params.fill(QChar(0));
+    if (r.value(QStringLiteral("ok")).toBool()) {
+        setWalletError(QString());
+        endStep(u.value(QStringLiteral("seed")).toString(), true);
+        return true;
+    }
+    if (r.value(QStringLiteral("code")).toString() == QStringLiteral("wrong_secret")) {
+        u.insert(QStringLiteral("error"), r.value(QStringLiteral("error")).toString());
+        setUnlockJson(compact(u));
+        return false;
+    }
+    u.insert(QStringLiteral("error"), walletErrorText(r, QStringLiteral("The unlock did not finish.")));
+    setUnlockJson(compact(u));
+    endStep(u.value(QStringLiteral("seed")).toString(), false);
+    return false;
+}
+
+bool EvmSignerUiBackend::cancelUnlock()
+{
+    const QJsonObject u = parseObject(unlockJson());
+    const QString handle = u.value(QStringLiteral("handle")).toString();
+    if (!handle.isEmpty()) {
+        modules().signer_manager_module.cancel_unlock(handle);
+    }
+    m_unlockPoll.stop();
+    if (renderedSigner() != kQrSigner) {
+        qrRelease();
+    }
+    setUnlockJson(QStringLiteral("{}"));
+    if (!handle.isEmpty()) {
+        emit unlockEnded(u.value(QStringLiteral("seed")).toString(), false);
+    }
+    return true;
+}
+
+bool EvmSignerUiBackend::lockWallets(QString seedsJson)
+{
+    const QJsonArray seeds = QJsonDocument::fromJson(seedsJson.toUtf8()).array();
+    QJsonObject body;
+    if (!seeds.isEmpty()) {
+        body.insert(QStringLiteral("seeds"), seeds);
+    }
+    const bool ok = walletReply(modules().signer_manager_module.lock_wallets(compact(body)),
+                                QStringLiteral("Could not lock."));
+    refreshWallets();
+    return ok;
+}
+
+bool EvmSignerUiBackend::setNames(QString seed, QString name, QString privateName)
+{
+    QJsonObject body{ { QStringLiteral("seed"), seed }, { QStringLiteral("privateName"), privateName } };
+    if (!name.trimmed().isEmpty()) {
+        body.insert(QStringLiteral("name"), name);
+    }
+    const bool ok = walletReply(modules().signer_manager_module.set_names(compact(body)),
+                                QStringLiteral("Could not rename the wallet."));
+    refreshWallets();
+    return ok;
+}
+
+QString EvmSignerUiBackend::createPassword(QString name, QString password)
+{
+    QString params = compact(QJsonObject{ { QStringLiteral("name"), name }, { QStringLiteral("password"), password } });
+    password.fill(QChar(0));
+    const QJsonObject r = parseObject(modules().signer_manager_module.create_password(params));
+    params.fill(QChar(0));
+    refreshWallets();
+    if (!r.value(QStringLiteral("ok")).toBool()) {
+        setWalletError(walletErrorText(r, QStringLiteral("Could not add the password.")));
+        return QString();
+    }
+    setWalletError(QString());
+    return r.value(QStringLiteral("id")).toString();
+}
+
+bool EvmSignerUiBackend::renamePassword(QString id, QString name)
+{
+    const QJsonObject body{ { QStringLiteral("id"), id }, { QStringLiteral("name"), name } };
+    const bool ok = walletReply(modules().signer_manager_module.rename_password(compact(body)),
+                                QStringLiteral("Could not rename the password."));
+    refreshWallets();
+    return ok;
+}
+
+bool EvmSignerUiBackend::changePassword(QString id, QString oldPassword, QString newPassword)
+{
+    QString params = compact(QJsonObject{
+        { QStringLiteral("id"), id }, { QStringLiteral("old"), oldPassword }, { QStringLiteral("new"), newPassword } });
+    oldPassword.fill(QChar(0));
+    newPassword.fill(QChar(0));
+    const bool ok = walletReply(modules().signer_manager_module.change_password(params),
+                                QStringLiteral("Could not change the password."));
+    params.fill(QChar(0));
+    return ok;
+}
+
+bool EvmSignerUiBackend::removePassword(QString id)
+{
+    const bool ok = walletReply(modules().signer_manager_module.remove_password(compact(QJsonObject{ { QStringLiteral("id"), id } })),
+                                QStringLiteral("Could not remove the password."));
+    refreshWallets();
+    return ok;
+}
+
+bool EvmSignerUiBackend::showOpen(QString handle)
+{
+    QJsonObject r = parseObject(modules().signer_manager_module.acknowledge_access(handle));
+    if (!r.value(QStringLiteral("ok")).toBool()) {
+        setOpenJson(QStringLiteral("{}"));
+        setWalletError(walletErrorText(r, QStringLiteral("Could not show that request.")));
+        return false;
+    }
+    r.remove(QStringLiteral("ok"));
+    setWalletError(QString());
+    setOpenJson(compact(r));
+    return true;
+}
+
+bool EvmSignerUiBackend::consentOpen(QString handle, QString bundleId, QString group)
+{
+    QJsonObject body{ { QStringLiteral("handle"), handle }, { QStringLiteral("bundle_id"), bundleId } };
+    if (!group.isEmpty()) {
+        body.insert(QStringLiteral("group"), group);
+    }
+    const bool ok = walletReply(modules().signer_manager_module.approve_access(compact(body)),
+                                QStringLiteral("Could not open the wallet."));
+    if (ok) {
+        setOpenJson(QStringLiteral("{}"));
+    }
+    refreshWallets();
+    return ok;
+}
+
+bool EvmSignerUiBackend::rejectOpen(QString handle)
+{
+    const bool ok = modules().signer_manager_module.reject_access(handle);
+    setOpenJson(QStringLiteral("{}"));
+    refreshWallets();
+    return ok;
 }

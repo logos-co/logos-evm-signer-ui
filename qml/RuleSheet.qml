@@ -49,11 +49,17 @@ Rectangle {
           giveUp: "Forget the password and this wallet's data here is lost: you add the wallet again." },
         { key: "or", label: (keystoreOnly ? "Its keystore password" : "The device") + ", or a password alone",
           gain: "You can unlock it without " + deviceWord + ".",
-          giveUp: "Whoever guesses the password on this computer sees this wallet." }
+          giveUp: "Whoever guesses the password on this computer sees this wallet." },
+        { key: "always", label: "Always unlocked",
+          gain: "Nothing to unlock: its accounts show from the moment Basecamp starts, and Lock leaves it open.",
+          giveUp: "No protection: anyone with this computer's files reads this wallet's data here. Protecting it again later gives it new keys." }
     ] : [
         { key: "password", label: "A password",
           gain: "The wallet's accounts are kept here between sessions.",
-          giveUp: "Forget the password and this wallet's data here is lost: you add the wallet again." }
+          giveUp: "Forget the password and this wallet's data here is lost: you add the wallet again." },
+        { key: "always", label: "Always unlocked",
+          gain: "Nothing to unlock: its accounts show from the moment Basecamp starts, and Lock leaves it open.",
+          giveUp: "No protection: anyone with this computer's files reads this wallet's data here. Protecting it again later gives it new keys." }
     ]
     property int choice: 0
     // An existing password's id, or `new`.
@@ -66,18 +72,20 @@ Rectangle {
         var and = ws.some(function (w) { return w.length === 2 && w.indexOf("device") >= 0 })
         var device = ws.some(function (w) { return w.length === 1 && w[0] === "device" })
         var alone = ws.some(function (w) { return w.length === 1 && w[0].indexOf("password:") === 0 })
-        choice = !(wallet && wallet.device) ? 0 : and ? 1 : device && alone ? 2 : 0
+        var always = ws.some(function (w) { return w.length === 0 })
+        choice = always ? choices.length - 1 : !(wallet && wallet.device) ? 0 : and ? 1 : device && alone ? 2 : 0
         var pw = [].concat.apply([], ws).filter(function (f) { return f.indexOf("password:") === 0 })
         if (pw.length > 0) passwordId = pw[0].substring("password:".length)
     }
     readonly property var current: choices.length > choice ? choices[choice] : null
-    readonly property bool needsPassword: current !== null && current.key !== "device"
+    readonly property bool needsPassword: current !== null && current.key !== "device" && current.key !== "always"
     readonly property string chosenPassword: !needsPassword ? "" : passwordId !== "" ? passwordId
                                            : passwords.length > 0 ? passwords[0].id : "new"
 
     function waysFor(key, pid) {
         var p = "password:" + pid
         if (key === "device") return [["device"]]
+        if (key === "always") return [[]]
         if (key === "and") return [["device", p]]
         if (key === "or") return [["device"], [p]]
         return [[p]]

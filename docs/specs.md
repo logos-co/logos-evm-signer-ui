@@ -180,7 +180,9 @@ each device's own app.
   - the device only;
   - the device and a password;
   - the device, or a password alone;
-  - for a wallet whose holders give no unlock key, a password alone.
+  - for a wallet whose holders give no unlock key, a password alone;
+  - for any wallet, always unlocked: no protection, open from the start, and no Lock. Moving it
+    back to a protected rule gives it new keys.
 
   Each says what it gains and what it gives up. A keystore wallet's "device" is its own keystore
   password. A new way that takes the device asks the device again, and a new password is made

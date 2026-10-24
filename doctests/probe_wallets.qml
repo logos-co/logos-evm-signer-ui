@@ -276,7 +276,7 @@ Item {
         console.log("then the rule, which takes the device again for its new way")
         view.item.openRule("s_card", "rule")
         var choices = probe.visibleAll("ruleChoice")
-        check("three rules on offer for a device", choices.length, 3)
+        check("four rules on offer for a device", choices.length, 4)
         choices[1].clicked()
         probe.click("ruleNewPassword")
         probe.type("ruleNewPasswordName", "Work")
@@ -291,6 +291,41 @@ Item {
         check("...and the new password's typed value", args ? args[4] : "", JSON.stringify({ p_new: "longenough" }))
         fake.unlockEnded("s_card", true)
         check("the rule sheet closes once done", probe.find(view.item, "ruleSheet").visible, false)
+    }
+
+    function assertAWalletCanBeLeftAlwaysUnlocked() {
+        console.log("")
+        console.log("the card's rule moves to always unlocked: no device, no password, and no Lock")
+        view.item.openRule("s_card", "rule")
+        var choices = probe.visibleAll("ruleChoice")
+        check("the last choice", choices[3].text, "Always unlocked")
+        choices[3].clicked()
+        check("no password asked", probe.visibleAll("ruleNewPassword").length, 0)
+        probe.click("ruleApply")
+        var args = fake.last("setRule")
+        check("a way that takes nothing", args ? args[1] : "", JSON.stringify([[]]))
+        check("...without the device", args ? args[2] + args[3] : "x", "")
+        fake.unlockEnded("s_card", true)
+
+        var s = JSON.parse(fake.walletsJson)
+        s.wallets.forEach(function (w) {
+            if (w.seed === "s_card") { w.locked = false; w.alwaysUnlocked = true; w.ways = [{ id: "w_free", factors: [] }] }
+        })
+        fake.walletsJson = JSON.stringify(s)
+        var states = probe.findAll(view.item, "walletState").map(function (o) { return o.text })
+        check("shown as always unlocked", states.indexOf("Always unlocked") >= 0, true)
+        var rules = probe.findAll(view.item, "walletRule").map(function (o) { return o.text })
+        check("...and why", rules.indexOf("Always unlocked: its data here isn't protected.") >= 0, true)
+        view.item.openRule("s_card", "rule")
+        check("its rule sheet starts on it", probe.visibleAll("ruleChoice")[3].checked, true)
+        probe.click("ruleClose")
+
+        // Back to the card's rule as the other checks expect it.
+        s = JSON.parse(fake.walletsJson)
+        s.wallets.forEach(function (w) {
+            if (w.seed === "s_card") { w.alwaysUnlocked = false; w.ways = [{ id: "w_dev", factors: [{ kind: "device" }] }] }
+        })
+        fake.walletsJson = JSON.stringify(s)
     }
 
     function assertLockAllLocksEveryWallet() {
@@ -392,6 +427,7 @@ Item {
             probe.assertAMistypedPasswordIsTypedAgainWithoutTheDevice()
             probe.assertAnOpenWaitsBesideItsWalletForConsent()
             probe.assertARuleWithANewPasswordCreatesItFirst()
+            probe.assertAWalletCanBeLeftAlwaysUnlocked()
             probe.assertLockAllLocksEveryWallet()
             probe.assertTheUnlockIntentEndsOnceTheWalletUnlocks()
             probe.assertTheUnlockIntentWalksEveryLockedWallet()

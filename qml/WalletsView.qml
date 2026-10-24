@@ -49,6 +49,7 @@ ColumnLayout {
             }).join(" and ")
         })
         if (ways.length === 0) return "No way in yet: set a password, or it can't be unlocked after a restart."
+        if (w.alwaysUnlocked) return "Always unlocked: its data here isn't protected."
         return "Unlocks with " + ways.join(", or ") + "."
     }
     // An account's own name, never its wallet's, then where it is: its address, or a Bitcoin
@@ -137,7 +138,7 @@ ColumnLayout {
                             }
                             LogosText {
                                 objectName: "walletState"
-                                text: card.w.locked ? "Locked" : "Unlocked"
+                                text: card.w.alwaysUnlocked ? "Always unlocked" : card.w.locked ? "Locked" : "Unlocked"
                                 textFormat: Text.PlainText
                                 color: card.w.locked ? Theme.palette.textSecondary : Theme.palette.text
                             }
@@ -245,7 +246,7 @@ ColumnLayout {
                             }
                             LogosButton {
                                 objectName: "walletLock"
-                                visible: !card.w.locked
+                                visible: !card.w.locked && !card.w.alwaysUnlocked
                                 text: "Lock"
                                 onClicked: view.backend.lockWallets(JSON.stringify([card.w.seed]))
                             }

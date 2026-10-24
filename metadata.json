@@ -39,7 +39,13 @@
           "name": "seeds",
           "type": "array",
           "required": false,
-          "description": "The wallets (the signer manager's seed ids) the app needs unlocked; each locked one is shown in turn, or every locked wallet when absent"
+          "description": "The wallets the app needs unlocked: the signer manager's seed ids, or with signer that signer's own names for them; each locked one is shown in turn, or every locked wallet when absent"
+        },
+        {
+          "name": "signer",
+          "type": "string",
+          "required": false,
+          "description": "Whose names seeds are: a signer module, naming its seeds as it does to the signer manager"
         },
         {
           "name": "openHandle",

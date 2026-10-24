@@ -94,7 +94,8 @@ Item {
         ruleSheet.reset()
     }
     // What a `wallets.unlock` asks for, in order: the wallet an open names; else every locked
-    // wallet it lists, or every locked wallet when it lists none; else the first it lists.
+    // wallet it lists, or every locked wallet when it lists none; else the first it lists, known.
+    // `seeds` are the manager's ids, or with `signer` that signer's own names for its seeds.
     function unlockTargets(params) {
         var ws = root.parsed(backend.walletsJson, ({})).wallets || []
         var opens = root.parsed(backend.opensJson, [])
@@ -102,9 +103,16 @@ Item {
             for (var i = 0; i < opens.length; i++)
                 if (opens[i].handle === params.openHandle && opens[i].seed) return [opens[i].seed]
         var asked = params.seeds || []
-        var locked = ws.filter(function (w) { return w.locked && (asked.length === 0 || asked.indexOf(w.seed) >= 0) })
+        var signer = params.signer || ""
+        var named = function (w) {
+            if (signer === "") return asked.indexOf(w.seed) >= 0
+            return (w.holders || []).some(function (h) { return h.signer === signer && asked.indexOf(h.seed) >= 0 })
+        }
+        var locked = ws.filter(function (w) { return w.locked && (asked.length === 0 || named(w)) })
                        .map(function (w) { return w.seed })
-        return locked.length > 0 ? locked : asked.slice(0, 1)
+        if (locked.length > 0) return locked
+        var known = asked.length > 0 ? ws.filter(named) : []
+        return known.length > 0 ? [known[0].seed] : []
     }
     function isUnlocked(seed) {
         var ws = root.parsed(backend.walletsJson, ({})).wallets || []

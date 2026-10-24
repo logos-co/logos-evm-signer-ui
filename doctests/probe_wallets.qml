@@ -403,6 +403,17 @@ Item {
         probe.responses = probe.responses.slice(0, 2)
 
         probe.setUnlocked("s_card", true)
+        probe.setUnlocked("s_qr", true)
+        shell.intentRequested("req-named", "wallets.unlock", { seeds: ["mkid"], signer: "keycard_shell_module" }, "evm_keystore_ui")
+        check("a signer's own name for its seed", probe.sheet().visible && probe.sheet().seed === "s_card", true)
+        check("...that wallet only", probe.find(view.item, "unlockAfter").visible, false)
+        probe.click("unlockClose")
+        probe.responses = probe.responses.slice(0, 2)
+        shell.intentRequested("req-unknown", "wallets.unlock", { seeds: ["g_nothing"], signer: "keystore_module" }, "evm_keystore_ui")
+        check("seeds that name no wallet: bad_request, no sheet", probe.responses[2].error === "bad_request" && !probe.sheet().visible, true)
+        probe.responses = probe.responses.slice(0, 2)
+
+        probe.setUnlocked("s_card", true)
         probe.setUnlocked("s_qr", false)
         shell.intentRequested("req-skip", "wallets.unlock", {}, "evm_keystore_ui")
         check("only the locked ones", probe.sheet().seed === "s_card" && probe.find(view.item, "unlockAfter").visible === false, true)

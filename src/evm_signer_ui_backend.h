@@ -45,6 +45,22 @@ public:
     bool qrPress() override;
     bool qrCancel() override;
 
+    void refreshWallets() override;
+    bool unlockWallet(QString seed, QString way, QString holder, QString secret, QString passwordsJson) override;
+    bool retryUnlock(QString passwordsJson) override;
+    bool cancelUnlock() override;
+    bool lockWallets(QString seedsJson) override;
+    bool setRule(QString seed, QString waysJson, QString holder, QString secret, QString passwordsJson) override;
+    bool changeKeys(QString seed, bool newIndex, QString holder, QString secret, QString passwordsJson) override;
+    bool setNames(QString seed, QString name, QString privateName) override;
+    QString createPassword(QString name, QString password) override;
+    bool renamePassword(QString id, QString name) override;
+    bool changePassword(QString id, QString oldPassword, QString newPassword) override;
+    bool removePassword(QString id) override;
+    bool showOpen(QString handle) override;
+    bool consentOpen(QString handle, QString bundleId, QString group) override;
+    bool rejectOpen(QString handle) override;
+
 protected:
     void onContextReady() override;
 
@@ -74,6 +90,18 @@ private:
     /// The request is gone: let the scanner go, off the IPC stack.
     void qrRelease();
     void qrPoll();
+    /// Is a QR wallet's unlock step drawn here now?
+    bool qrUnlocking() const;
+
+    /// A step that may need the device: `unlock_wallet`, `set_rule` or `change_keys` with `body`.
+    /// Its secret parts are wiped once sent.
+    bool beginStep(const QString &method, const QString &seed, const QString &holder, QJsonObject body,
+                   QString secret, QString passwordsJson);
+    /// Follow the device step under way, and end it once it settles.
+    void unlockPoll();
+    void endStep(const QString &seed, bool ok);
+    /// A wallet call's reply: true when the manager said ok, else its error under the Wallets view.
+    bool walletReply(const QString &reply, const QString &fallback);
 
     /// The scanner's handle for this app's claim on drawing sessions; empty while none is held,
     /// or where qr_scanner_module isn't installed.
@@ -82,6 +110,11 @@ private:
     QString m_qrFramesId;
     QTimer m_qrPoll;
     bool m_qrInFlight = false;
+    /// Follows a wallet's device step.
+    QTimer m_unlockPoll;
+    /// The Wallets view's backstop.
+    QTimer m_walletsPoll;
+    bool m_walletsInFlight = false;
 
     /// Built once: it parses ~430KB of ABI JSON. Null if that ever fails, in
     /// which case interpretation is simply absent.

@@ -801,18 +801,16 @@ sections:
           qt_mcp: "result-mcp"
           launch_timeout: 600
           tests:
-            - name: "The shell is up and the app list has been scanned"
-              # "Welcome Back," replaces "Welcome to Basecamp!" only once the
-              # launcher model is POPULATED -- i.e. the plugin directory has been
-              # scanned and the evm_signer_ui tile exists. Waiting on "Workspace"
-              # alone proves the shell painted, not that there is anything to
-              # click, so the click below would race the scan.
+            - name: "The shell is up"
+              # Basecamp's welcome page no longer says "Welcome Back," once the launcher
+              # model is populated (logos-basecamp#510): it reads "Welcome to Basecamp"
+              # either way. So this only proves the shell painted; the next step waits
+              # for the tile itself, which is what the click below needs.
               action: wait_for
-              texts: ["Welcome Back,", "Workspace"]
+              texts: ["Welcome to Basecamp", "Workspace"]
               # Measured at t=4.1s against this exact build and staged tree, so
               # 30s is ~7x margin. A failure here means the driver is talking to
-              # the wrong app, not that Basecamp is slow -- raising this number
-              # has never once helped.
+              # the wrong app, not that Basecamp is slow.
               timeout: 30000
 
             - name: "The tile carries the display_name, not the package name"
@@ -820,10 +818,13 @@ sections:
               # SidebarPanel.qml renders `displayName || name`, so without the
               # metadata key this reads "evm_signer_ui" and this fails -- which is
               # what makes it a test of the label rather than of the sidebar.
+              # Polled until the plugin directory has been scanned and the tile exists:
+              # the click below would race the scan otherwise.
               action: expect_property
               find_value: "sidebar.app.evm_signer_ui"
               property: "text"
               value: "Signer"
+              timeout: 30000
 
             - name: "Open the Signer from the sidebar"
               # Nothing opens an app on its own: Basecamp loads a ui_qml plugin

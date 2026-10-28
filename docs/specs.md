@@ -151,9 +151,64 @@ What was signed **without** being shown — inside an unlock the person granted 
 named apps only — is listed under "Signed without asking", refreshed when the manager announces
 one.
 
-## Unlocking is the keys app's
+## Wallets: unlocked here, once per session
 
-The Signer never unlocks an account. A request that needs the account's password also offers
+A wallet is a seed, whichever signers hold it: the keystore, a Keycard, a Shell, a QR wallet. Its
+data in every module is encrypted under keys the signer manager derives from that seed's key, and
+the person unlocks it here, once, for every app, until they lock it or quit. The **Wallets** tab
+lists every wallet from the manager's `wallet_settings`: its public name, and its private name
+once unlocked; its holders; how it unlocks; its accounts once unlocked (from `roster`, by
+`seed`); and the apps waiting to open it (`access_requests`, by `seed`). Device setup stays in
+each device's own app.
+
+- **The Unlock sheet** offers the wallet's ways in and asks for what the chosen one takes:
+  - which holder to ask when it takes the device;
+  - the card's PIN, or the keystore's password;
+  - nothing for a Shell, which asks the person itself;
+  - a QR round trip drawn here, as for signing;
+  - each named password, by the name the person gave it.
+
+  `unlock_wallet` either settles at once or starts a device step, which `unlock_progress`
+  follows. When the device answered but a password didn't match, the sheet asks for the password
+  again without the device (`retryUnlock`). Closing the sheet while the device works cancels the
+  step.
+- **An app's open** is shown in the sheet beside its wallet, in the manager's lines, verbatim.
+  "Open it for that app" is the person's consent (`approve_access` without a password), armed
+  only once the wallet is unlocked; "Refuse" rejects it. An open that names no wallet lists the
+  unlocked wallets' accounts of the family asked for, and the person picks one.
+- **Rules.** "Rule…" offers:
+  - the device only;
+  - the device and a password;
+  - the device, or a password alone;
+  - for a wallet whose holders give no unlock key, a password alone;
+  - for any wallet, always unlocked: no protection, open from the start, and no Lock. Moving it
+    back to a protected rule gives it new keys.
+
+  Each says what it gains and what it gives up. A keystore wallet's "device" is its own keystore
+  password. A new way that takes the device asks the device again, and a new password is made
+  before the rule that takes it.
+- **Passwords** are named, can unlock several wallets, and are added, renamed, changed and
+  removed here; one a rule still takes can't be removed.
+- **New keys** wrap every way in again, so they need each way's factors; an option also moves to
+  the device's next unlock key, for when a QR wallet's answer may have been photographed.
+- **Lock** locks one wallet, **Lock all** every wallet.
+- **`wallets.unlock`** (`{ seeds?, signer?, openHandle? }`) opens the sheet for the wallet an open names,
+  else for each locked one of `seeds`, or each locked wallet when it names none, one after another
+  in the wallets' order. It is answered `ok` once the last unlocks (or, with an open, once the open
+  settles approved), `ok` too when the person closes the sheet after unlocking at least one, and
+  `cancelled` when they close it having unlocked none; a second ask displaces the first. **Skip**
+  leaves the wallet on screen locked and goes on to the next, for one whose device is not at hand.
+  `seeds` are the signer manager's ids, or, with `signer`, that signer's own names for its seeds, as
+  its holder entries carry them (the keystore's app asks for the keystore's locked wallets so). Seeds
+  that name no wallet are answered `bad_request`.
+
+Passwords and PINs cross from this QML to this backend for the same reason the vault password does:
+the two are one trust unit, and only the backend talks to the manager. The backend sends them in
+one call and wipes its copies.
+
+## Signing without a password is the keys app's
+
+The Signer never unlocks an account for signing. A request that needs the account's password also offers
 "Unlock in the keys app…", which raises `keystore.accounts.unlock` with the request's `account`
 (from `acknowledge`) and, as `app`, the module that asked; the person decides the terms there.
 When the keys app answers, the request is acknowledged again if it is still on screen, so an

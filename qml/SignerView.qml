@@ -44,6 +44,81 @@ Item {
     // left to the shell's ten-minute backstop.
     property var intentByHandle: ({})
 
+    // ── wallets ─────────────────────────────────────────────────────────────
+    // 0: the requests, 1: the wallets.
+    property int page: 0
+    onPageChanged: if (tabs.currentIndex !== page) tabs.currentIndex = page
+    // The wallet the Unlock sheet is for, and the open that brought the person there, if any.
+    property string unlockSeed: ""
+    property string unlockOpen: ""
+    property string ruleSeed: ""
+    property string ruleMode: "rule"
+    // The `wallets.unlock` intent being serviced, ended when the wallet unlocks or the sheet closes.
+    property string unlockIntent: ""
+    // The wallets that intent still asks for after the one on screen, and whether one unlocked.
+    property var unlockQueue: []
+    property bool unlockedSome: false
+    function parsed(raw, empty) {
+        try { return JSON.parse(raw) } catch (e) { return empty }
+    }
+    function openUnlock(seed, openHandle) {
+        root.page = 1
+        root.unlockOpen = openHandle || ""
+        root.unlockSeed = seed
+    }
+    function closeUnlock(ok) {
+        root.unlockSeed = ""
+        root.unlockOpen = ""
+        // Closing part way still answers ok: the wallets unlocked so far stay unlocked.
+        ok = ok || root.unlockedSome
+        root.unlockQueue = []
+        root.unlockedSome = false
+        if (root.unlockIntent !== "") {
+            logos.respond(root.unlockIntent, ok, ({}), ok ? "" : "cancelled")
+            root.unlockIntent = ""
+        }
+    }
+    // The next wallet the intent asks for that is still locked, taken off the queue.
+    function nextQueued() {
+        var q = root.unlockQueue.slice()
+        while (q.length > 0) {
+            var s = q.shift()
+            if (!root.isUnlocked(s)) { root.unlockQueue = q; return s }
+        }
+        root.unlockQueue = []
+        return ""
+    }
+    function openRule(seed, mode) {
+        root.ruleMode = mode
+        root.ruleSeed = seed
+        ruleSheet.reset()
+    }
+    // What a `wallets.unlock` asks for, in order: the wallet an open names; else every locked
+    // wallet it lists, or every locked wallet when it lists none; else the first it lists, known.
+    // `seeds` are the manager's ids, or with `signer` that signer's own names for its seeds.
+    function unlockTargets(params) {
+        var ws = root.parsed(backend.walletsJson, ({})).wallets || []
+        var opens = root.parsed(backend.opensJson, [])
+        if (params.openHandle)
+            for (var i = 0; i < opens.length; i++)
+                if (opens[i].handle === params.openHandle && opens[i].seed) return [opens[i].seed]
+        var asked = params.seeds || []
+        var signer = params.signer || ""
+        var named = function (w) {
+            if (signer === "") return asked.indexOf(w.seed) >= 0
+            return (w.holders || []).some(function (h) { return h.signer === signer && asked.indexOf(h.seed) >= 0 })
+        }
+        var locked = ws.filter(function (w) { return w.locked && (asked.length === 0 || named(w)) })
+                       .map(function (w) { return w.seed })
+        if (locked.length > 0) return locked
+        var known = asked.length > 0 ? ws.filter(named) : []
+        return known.length > 0 ? [known[0].seed] : []
+    }
+    function isUnlocked(seed) {
+        var ws = root.parsed(backend.walletsJson, ({})).wallets || []
+        return ws.some(function (w) { return w.seed === seed && w.locked === false })
+    }
+
     function answerIntent(handle, ok, error) {
         var id = root.intentByHandle[handle]
         if (id === undefined) return
@@ -60,7 +135,28 @@ Item {
         }
 
         function onIntentRequested(requestId, intent, params, requesterName) {
+            if (intent === "wallets.unlock") {
+                // One at a time: a second ask while the sheet is up ends the first as displaced.
+                if (root.unlockIntent !== "") logos.respond(root.unlockIntent, false, ({}), "cancelled")
+                var targets = root.ready ? root.unlockTargets(params || {}) : []
+                var seed = targets.length > 0 ? targets[0] : ""
+                if (seed === "") {
+                    logos.respond(requestId, false, ({}), "bad_request")
+                    return
+                }
+                // Already unlocked, and no open to consent to: nothing to ask the person.
+                if (!(params || {}).openHandle && root.isUnlocked(seed)) {
+                    logos.respond(requestId, true, ({}), "")
+                    return
+                }
+                root.unlockIntent = requestId
+                root.unlockQueue = targets.slice(1)
+                root.unlockedSome = false
+                root.openUnlock(seed, (params || {}).openHandle || "")
+                return
+            }
             if (intent !== "evm.signing.approve") return
+            root.page = 0
 
             // Acknowledging demotes whatever is on screen, so an intent held for THAT
             // request is about to be displaced. End it here: its manager record is
@@ -91,6 +187,20 @@ Item {
             root.answerIntent(handle, approved, approved ? "" : "cancelled")
         }
         function onRenderedHandleChanged() { root.unlockNote = "" }
+        // The sheet's step ended: the rule or keys sheet closes once done, and an unlock asked
+        // for by an intent moves to the next wallet it asks for, or ends once the last is unlocked
+        // and no open waits beside it.
+        function onUnlockEnded(seed, ok) {
+            if (ok && seed === root.ruleSeed) root.ruleSeed = ""
+            if (!ok || seed !== root.unlockSeed || root.unlockOpen !== "" || root.unlockIntent === "") return
+            root.unlockedSome = true
+            var next = root.nextQueued()
+            if (next !== "") root.unlockSeed = next
+            else root.closeUnlock(true)
+        }
+        function onOpenSettled(handle, state) {
+            if (handle === root.unlockOpen) root.closeUnlock(state === "approved")
+        }
     }
 
     // Unlocking is the keys app's. Send the person there for this request's account, for the
@@ -258,391 +368,462 @@ Item {
             color: Theme.palette.error
         }
 
-        // ── the queue ───────────────────────────────────────────────────────
-        LogosText {
-            visible: !root.showing
-            text: root.queue.length === 0
-                  ? "No signing requests are waiting."
-                  : "Select a request to review:"
-            textFormat: Text.PlainText
+        LogosTabBar {
+            id: tabs
+            objectName: "signerTabs"
+            Layout.fillWidth: true
+            // Not bound to root.page: a click assigns currentIndex and would break the binding.
+            onCurrentIndexChanged: root.page = currentIndex
+            LogosTabButton { text: root.queue.length > 0 ? "Requests (" + root.queue.length + ")" : "Requests" }
+            LogosTabButton { text: "Wallets" }
         }
 
-        ListView {
-            visible: !root.showing
+        StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            clip: true
-            spacing: 6
-            model: root.queue
-            delegate: LogosButton {
-                width: ListView.view.width
-                // Summary only — the queue never carries leg detail.
-                text: (modelData.requester || "unknown") + " — " +
-                      (modelData.purpose || "signature") + "  [" +
-                      String(modelData.handle).substring(0, 12) + "]"
-                onClicked: backend.acknowledge(modelData.handle)
-            }
-        }
+            currentIndex: root.page
 
-        // ── signed without asking ───────────────────────────────────────────
-        // Inside an unlock the person granted without confirmation: listed, so it is never unseen twice.
-        LogosText {
-            objectName: "unattendedHeading"
-            visible: !root.showing && root.unattended.length > 0
-            text: "Signed without asking:"
-            textFormat: Text.PlainText
-            font.bold: true
-        }
-        Repeater {
-            model: root.showing ? [] : root.unattended
-            delegate: LogosText {
-                objectName: "unattendedLine"
-                Layout.fillWidth: true
-                text: (modelData.requester || "unknown") + " — " + modelData.account
-                textFormat: Text.PlainText
-                elide: Text.ElideRight
-            }
-        }
-
-        // ── the request under review ────────────────────────────────────────
-        //
-        // Three sections, in this order and never merged: who is asking and what THEY
-        // say it is for; what is actually signed; and what this signer makes of that.
-        // The first is requester-authored, the second is the manager's, the third is
-        // this backend's — and a human has to be able to tell them apart at a glance,
-        // because the whole class of attack here is text that looks like it came from
-        // somewhere more trustworthy than it did.
-        ColumnLayout {
-            visible: root.showing
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            spacing: 10
-
-            ScrollView {
+            ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                clip: true
+                spacing: 12
 
-                ColumnLayout {
-                    width: parent.width
-                    spacing: 10
+                // ── the queue ───────────────────────────────────────────────────────
+                LogosText {
+                    visible: !root.showing
+                    text: root.queue.length === 0
+                          ? "No signing requests are waiting."
+                          : "Select a request to review:"
+                    textFormat: Text.PlainText
+                }
 
-                    Section {
-                        objectName: "sectionRequester"
-                        number: 1
-                        // The name is the installed package's, never the requester's; the id always follows.
-                        heading: "Requested by: " + (!root.ready ? ""
-                                 : backend.renderedRequesterName
-                                   ? backend.renderedRequesterName + " (" + backend.renderedRequester + ")"
-                                   : backend.renderedRequester)
-                        caption: "What that app says this is for. Its own words — this " +
-                                 "signer cannot check any of it."
-
-                        Repeater {
-                            model: root.ready ? backend.claimLines : []
-                            delegate: Line {
-                                objectName: "claimLine"
-                                text: modelData
-                            }
-                        }
-                        Line {
-                            objectName: "noClaimLine"
-                            visible: root.ready && backend.claimLines.length === 0
-                            text: "(it gave no reason)"
-                            font.family: "sans-serif"
-                            font.italic: true
-                        }
-                    }
-
-                    Section {
-                        objectName: "sectionSigned"
-                        number: 2
-                        heading: "What you are signing"
-                        caption: "The signer manager's own reading of the request, shown " +
-                                 "in full and never shortened. This is what the signature " +
-                                 "will cover."
-
-                        Repeater {
-                            model: root.ready ? backend.renderLines : []
-                            delegate: Line {
-                                objectName: "renderLine"
-                                text: modelData
-                            }
-                        }
-                    }
-
-                    Section {
-                        objectName: "sectionInterpretation"
-                        number: 3
-                        heading: "What this signer makes of section 2"
-                        caption: "Decoded on this device from the lines above. Not part " +
-                                 "of what is signed, and every line says how sure it is."
-
-                        Repeater {
-                            // Named so the doc-test can assert the line COUNT: what this
-                            // layer must not do over a verified address is add anything,
-                            // and only a count can catch an absence.
-                            objectName: "interpretationLines"
-                            model: root.ready ? backend.interpretationLines : []
-                            delegate: Line {
-                                objectName: "interpretationLine"
-                                text: modelData
-                            }
-                        }
-                        Line {
-                            objectName: "noInterpretationLine"
-                            visible: root.ready && backend.interpretationLines.length === 0
-                            text: "(nothing could be decoded — which is normal for a " +
-                                  "message, a digest, or a call this signer does not know)"
-                            font.family: "sans-serif"
-                            font.italic: true
-                        }
+                ListView {
+                    visible: !root.showing
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 6
+                    model: root.queue
+                    delegate: LogosButton {
+                        width: ListView.view.width
+                        // Summary only — the queue never carries leg detail.
+                        text: (modelData.requester || "unknown") + " — " +
+                              (modelData.purpose || "signature") + "  [" +
+                              String(modelData.handle).substring(0, 12) + "]"
+                        onClicked: backend.acknowledge(modelData.handle)
                     }
                 }
-            }
 
-            LogosText {
-                objectName: "signerLine"
-                visible: root.signerLine !== "" && !root.choosing
-                Layout.fillWidth: true
-                text: root.signerLine
-                textFormat: Text.PlainText
-                wrapMode: Text.Wrap
-            }
-
-            // Which signer signs: the request and its commitment stay the same whichever is picked,
-            // so only the secret below changes, and a typed one is cleared.
-            ColumnLayout {
-                objectName: "signWith"
-                visible: root.choosing
-                Layout.fillWidth: true
-                spacing: 2
-
+                // ── signed without asking ───────────────────────────────────────────
+                // Inside an unlock the person granted without confirmation: listed, so it is never unseen twice.
                 LogosText {
-                    text: "Sign with"
+                    objectName: "unattendedHeading"
+                    visible: !root.showing && root.unattended.length > 0
+                    text: "Signed without asking:"
                     textFormat: Text.PlainText
                     font.bold: true
                 }
                 Repeater {
-                    model: root.choosing ? root.holders : []
-                    delegate: RowLayout {
-                        objectName: "signWithRow"
+                    model: root.showing ? [] : root.unattended
+                    delegate: LogosText {
+                        objectName: "unattendedLine"
+                        Layout.fillWidth: true
+                        text: (modelData.requester || "unknown") + " — " + modelData.account
+                        textFormat: Text.PlainText
+                        elide: Text.ElideRight
+                    }
+                }
+
+                // ── the request under review ────────────────────────────────────────
+                //
+                // Three sections, in this order and never merged: who is asking and what THEY
+                // say it is for; what is actually signed; and what this signer makes of that.
+                // The first is requester-authored, the second is the manager's, the third is
+                // this backend's — and a human has to be able to tell them apart at a glance,
+                // because the whole class of attack here is text that looks like it came from
+                // somewhere more trustworthy than it did.
+                ColumnLayout {
+                    visible: root.showing
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 10
+
+                    ScrollView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+
+                        ColumnLayout {
+                            width: parent.width
+                            spacing: 10
+
+                            Section {
+                                objectName: "sectionRequester"
+                                number: 1
+                                // The name is the installed package's, never the requester's; the id always follows.
+                                heading: "Requested by: " + (!root.ready ? ""
+                                         : backend.renderedRequesterName
+                                           ? backend.renderedRequesterName + " (" + backend.renderedRequester + ")"
+                                           : backend.renderedRequester)
+                                caption: "What that app says this is for. Its own words — this " +
+                                         "signer cannot check any of it."
+
+                                Repeater {
+                                    model: root.ready ? backend.claimLines : []
+                                    delegate: Line {
+                                        objectName: "claimLine"
+                                        text: modelData
+                                    }
+                                }
+                                Line {
+                                    objectName: "noClaimLine"
+                                    visible: root.ready && backend.claimLines.length === 0
+                                    text: "(it gave no reason)"
+                                    font.family: "sans-serif"
+                                    font.italic: true
+                                }
+                            }
+
+                            Section {
+                                objectName: "sectionSigned"
+                                number: 2
+                                heading: "What you are signing"
+                                caption: "The signer manager's own reading of the request, shown " +
+                                         "in full and never shortened. This is what the signature " +
+                                         "will cover."
+
+                                Repeater {
+                                    model: root.ready ? backend.renderLines : []
+                                    delegate: Line {
+                                        objectName: "renderLine"
+                                        text: modelData
+                                    }
+                                }
+                            }
+
+                            Section {
+                                objectName: "sectionInterpretation"
+                                number: 3
+                                heading: "What this signer makes of section 2"
+                                caption: "Decoded on this device from the lines above. Not part " +
+                                         "of what is signed, and every line says how sure it is."
+
+                                Repeater {
+                                    // Named so the doc-test can assert the line COUNT: what this
+                                    // layer must not do over a verified address is add anything,
+                                    // and only a count can catch an absence.
+                                    objectName: "interpretationLines"
+                                    model: root.ready ? backend.interpretationLines : []
+                                    delegate: Line {
+                                        objectName: "interpretationLine"
+                                        text: modelData
+                                    }
+                                }
+                                Line {
+                                    objectName: "noInterpretationLine"
+                                    visible: root.ready && backend.interpretationLines.length === 0
+                                    text: "(nothing could be decoded — which is normal for a " +
+                                          "message, a digest, or a call this signer does not know)"
+                                    font.family: "sans-serif"
+                                    font.italic: true
+                                }
+                            }
+                        }
+                    }
+
+                    LogosText {
+                        objectName: "signerLine"
+                        visible: root.signerLine !== "" && !root.choosing
+                        Layout.fillWidth: true
+                        text: root.signerLine
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                    }
+
+                    // Which signer signs: the request and its commitment stay the same whichever is picked,
+                    // so only the secret below changes, and a typed one is cleared.
+                    ColumnLayout {
+                        objectName: "signWith"
+                        visible: root.choosing
+                        Layout.fillWidth: true
+                        spacing: 2
+
+                        LogosText {
+                            text: "Sign with"
+                            textFormat: Text.PlainText
+                            font.bold: true
+                        }
+                        Repeater {
+                            model: root.choosing ? root.holders : []
+                            delegate: RowLayout {
+                                objectName: "signWithRow"
+                                Layout.fillWidth: true
+                                spacing: 8
+                                enabled: modelData.canTake === true && modelData.presence !== "absent"
+                                LogosRadioButton {
+                                    objectName: "signWithChoice"
+                                    // Not checkable: the manager's answer says who signs, not the click.
+                                    checkable: false
+                                    checked: modelData.signer === backend.renderedSigner
+                                    text: root.holderName(modelData)
+                                    // The reply is pending until it answers, and a pending reply is
+                                    // always truthy: wait for the answer before clearing the secret.
+                                    onClicked: logos.watch(backend.chooseSigner(backend.renderedHandle, modelData.signer),
+                                                           function (chosen) { if (chosen) pw.text = "" })
+                                }
+                                LogosText {
+                                    objectName: "signWithState"
+                                    text: root.holderState(modelData)
+                                    textFormat: Text.PlainText
+                                    opacity: 0.75
+                                }
+                                LogosText {
+                                    objectName: "signWithHow"
+                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 1
+                                    text: root.holderHow(modelData)
+                                    textFormat: Text.PlainText
+                                    wrapMode: Text.Wrap
+                                    color: Theme.palette.textSecondary
+                                }
+                            }
+                        }
+                    }
+
+                    LogosText {
+                        objectName: "deviceWaiting"
+                        visible: root.showing && backend.renderedSigning === true && !root.qrDrawing
+                                 && root.qr.in_window !== true
+                        Layout.fillWidth: true
+                        text: "Approved here. Now confirm on the device: this request stays until it answers."
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        color: Theme.palette.textSecondary
+                    }
+
+                    LogosText {
+                        objectName: "qrInWindow"
+                        visible: root.showing && backend.renderedSigning === true && root.qr.in_window === true
+                        Layout.fillWidth: true
+                        text: "Approved here. Continue in the Logos QR window: it showed this request before this app could."
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        color: Theme.palette.textSecondary
+                    }
+
+                    ColumnLayout {
+                        objectName: "qrPanel"
+                        visible: root.qrDrawing
                         Layout.fillWidth: true
                         spacing: 8
-                        enabled: modelData.canTake === true && modelData.presence !== "absent"
-                        LogosRadioButton {
-                            objectName: "signWithChoice"
-                            // Not checkable: the manager's answer says who signs, not the click.
-                            checkable: false
-                            checked: modelData.signer === backend.renderedSigner
-                            text: root.holderName(modelData)
-                            onClicked: if (backend.chooseSigner(backend.renderedHandle, modelData.signer)) pw.text = ""
-                        }
+
                         LogosText {
-                            objectName: "signWithState"
-                            text: root.holderState(modelData)
-                            textFormat: Text.PlainText
-                            opacity: 0.75
-                        }
-                        LogosText {
-                            objectName: "signWithHow"
+                            objectName: "qrHint"
                             Layout.fillWidth: true
-                            Layout.preferredWidth: 1
-                            text: root.holderHow(modelData)
+                            text: root.qr.hint || ""
+                            textFormat: Text.PlainText
+                            wrapMode: Text.Wrap
+                        }
+
+                        // Dark modules on white whatever the theme, with the quiet zone a reader needs, and
+                        // whole pixels a module so the edges stay sharp.
+                        Canvas {
+                            id: qrCanvas
+                            objectName: "qrCode"
+                            visible: root.qr.step === "show" && root.qrFrames.length > 0
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.preferredWidth: 420
+                            Layout.preferredHeight: 420
+                            property var frame: root.qrFrames.length > 0
+                                                ? root.qrFrames[root.qrIndex % root.qrFrames.length] : null
+                            onFrameChanged: requestPaint()
+                            onVisibleChanged: requestPaint()
+                            onPaint: {
+                                var ctx = getContext("2d")
+                                ctx.fillStyle = "#ffffff"
+                                ctx.fillRect(0, 0, width, height)
+                                if (!frame) return
+                                var quiet = 4
+                                var side = Math.min(width, height)
+                                var m = Math.floor(side / (frame.size + 2 * quiet))
+                                var off = Math.floor((side - m * frame.size) / 2)
+                                ctx.fillStyle = "#000000"
+                                for (var y = 0; y < frame.size; y++) {
+                                    for (var x = 0; x < frame.size; x++) {
+                                        if (frame.bits.charAt(y * frame.size + x) === "1")
+                                            ctx.fillRect(off + x * m, off + y * m, m, m)
+                                    }
+                                }
+                            }
+                        }
+
+                        LogosText {
+                            objectName: "qrCamera"
+                            visible: root.qr.step === "scan"
+                            Layout.fillWidth: true
+                            text: root.qr.seeing === true
+                                  ? "A code is in view: hold it steady."
+                                  : "No code in view yet: hold the wallet's answer up to the camera."
+                            textFormat: Text.PlainText
+                            wrapMode: Text.Wrap
+                        }
+
+                        LogosText {
+                            objectName: "qrProgress"
+                            visible: (root.qr.expected || 0) > 0
+                            text: "Read " + (root.qr.received || 0) + " of " + (root.qr.expected || 0) + " parts"
+                            textFormat: Text.PlainText
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            LogosButton {
+                                objectName: "qrStepButton"
+                                visible: (root.qr.label || "") !== ""
+                                text: root.qr.label || ""
+                                onClicked: backend.qrPress()
+                            }
+                            Item { Layout.fillWidth: true }
+                            LogosButton {
+                                objectName: "qrCancelButton"
+                                text: "Cancel"
+                                onClicked: backend.qrCancel()
+                            }
+                        }
+                    }
+
+                    LogosTextField {
+                        id: pw
+                        // Addressable by name: the doc-test harness locates fields with
+                        // find_by "objectName", and a type name is not stable (QML
+                        // decorates it, e.g. LogosTextField_QMLTYPE_18).
+                        objectName: "vaultPasswordField"
+                        visible: root.needsSecret
+                        Layout.fillWidth: true
+                        echoMode: TextInput.Password
+                        placeholderText: root.showing && backend.renderedCollects === "pin" ? "Card PIN" : "Vault password"
+
+                        // Mask every character immediately. Qt's default reveals the
+                        // last character typed for a second, which is exactly the
+                        // character an onlooker needs. `passwordMaskDelay` lives on the
+                        // inner TextInput -- LogosTextField does not re-expose it, but
+                        // it does expose the input itself as a readonly alias, so set
+                        // it there. Assigning it on the control fails to compile with
+                        // "Cannot assign to non-existent property", which takes the
+                        // WHOLE view down: a QML compile error means the plugin never
+                        // renders at all.
+                        Component.onCompleted: textInput.passwordMaskDelay = 0
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        visible: root.needsSecret && backend.renderedCollects === "password" && backend.renderedAccount !== ""
+                        LogosButton {
+                            objectName: "signerUnlockLink"
+                            text: "Unlock in the keys app…"
+                            onClicked: root.unlockInKeysApp()
+                        }
+                        LogosText {
+                            objectName: "unlockNote"
+                            visible: root.unlockNote !== ""
+                            Layout.fillWidth: true
+                            text: root.unlockNote
                             textFormat: Text.PlainText
                             wrapMode: Text.Wrap
                             color: Theme.palette.textSecondary
                         }
                     }
-                }
-            }
 
-            LogosText {
-                objectName: "deviceWaiting"
-                visible: root.showing && backend.renderedSigning === true && !root.qrDrawing
-                         && root.qr.in_window !== true
-                Layout.fillWidth: true
-                text: "Approved here. Now confirm on the device: this request stays until it answers."
-                textFormat: Text.PlainText
-                wrapMode: Text.Wrap
-                color: Theme.palette.textSecondary
-            }
-
-            LogosText {
-                objectName: "qrInWindow"
-                visible: root.showing && backend.renderedSigning === true && root.qr.in_window === true
-                Layout.fillWidth: true
-                text: "Approved here. Continue in the Logos QR window: it showed this request before this app could."
-                textFormat: Text.PlainText
-                wrapMode: Text.Wrap
-                color: Theme.palette.textSecondary
-            }
-
-            ColumnLayout {
-                objectName: "qrPanel"
-                visible: root.qrDrawing
-                Layout.fillWidth: true
-                spacing: 8
-
-                LogosText {
-                    objectName: "qrHint"
-                    Layout.fillWidth: true
-                    text: root.qr.hint || ""
-                    textFormat: Text.PlainText
-                    wrapMode: Text.Wrap
-                }
-
-                // Dark modules on white whatever the theme, with the quiet zone a reader needs, and
-                // whole pixels a module so the edges stay sharp.
-                Canvas {
-                    id: qrCanvas
-                    objectName: "qrCode"
-                    visible: root.qr.step === "show" && root.qrFrames.length > 0
-                    Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: 420
-                    Layout.preferredHeight: 420
-                    property var frame: root.qrFrames.length > 0
-                                        ? root.qrFrames[root.qrIndex % root.qrFrames.length] : null
-                    onFrameChanged: requestPaint()
-                    onVisibleChanged: requestPaint()
-                    onPaint: {
-                        var ctx = getContext("2d")
-                        ctx.fillStyle = "#ffffff"
-                        ctx.fillRect(0, 0, width, height)
-                        if (!frame) return
-                        var quiet = 4
-                        var side = Math.min(width, height)
-                        var m = Math.floor(side / (frame.size + 2 * quiet))
-                        var off = Math.floor((side - m * frame.size) / 2)
-                        ctx.fillStyle = "#000000"
-                        for (var y = 0; y < frame.size; y++) {
-                            for (var x = 0; x < frame.size; x++) {
-                                if (frame.bits.charAt(y * frame.size + x) === "1")
-                                    ctx.fillRect(off + x * m, off + y * m, m, m)
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        LogosButton {
+                            objectName: "signerRejectButton"
+                            text: "Reject"
+                            onClicked: { backend.reject(backend.renderedHandle); pw.text = "" }
+                        }
+                        LogosButton {
+                            objectName: "signerBackButton"
+                            text: "Back"
+                            // Read the handle BEFORE dismissing, which clears it. Walking away
+                            // without deciding leaves the request queued, so the requester is told
+                            // the same thing the user just did: not now.
+                            onClicked: {
+                                // A QR wallet's codes are drawn only here: leaving stops showing and reading
+                                // them, and so cancels its signature, rather than leave the camera waiting.
+                                if (root.qrDrawing) backend.qrCancel()
+                                root.answerIntent(backend.renderedHandle, false, "cancelled")
+                                backend.dismiss()
+                                pw.text = ""
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                        LogosButton {
+                            id: approveBtn
+                            objectName: "signerApproveButton"
+                            // The dwell flag is owned by C++, so editing this binding
+                            // cannot shorten it; the backend refuses early approvals
+                            // regardless of what the view believes.
+                            enabled: root.ready && backend.dwellElapsed && (!root.needsSecret || pw.text.length > 0)
+                                     && backend.renderedSigning !== true
+                            text: backend.dwellElapsed ? "Approve" : "Reading…"
+                            onClicked: {
+                                backend.approve(backend.renderedHandle, backend.renderedBundleId,
+                                                root.needsSecret ? pw.text : "")
+                                pw.text = ""
                             }
                         }
                     }
                 }
-
-                LogosText {
-                    objectName: "qrCamera"
-                    visible: root.qr.step === "scan"
-                    Layout.fillWidth: true
-                    text: root.qr.seeing === true
-                          ? "A code is in view: hold it steady."
-                          : "No code in view yet: hold the wallet's answer up to the camera."
-                    textFormat: Text.PlainText
-                    wrapMode: Text.Wrap
-                }
-
-                LogosText {
-                    objectName: "qrProgress"
-                    visible: (root.qr.expected || 0) > 0
-                    text: "Read " + (root.qr.received || 0) + " of " + (root.qr.expected || 0) + " parts"
-                    textFormat: Text.PlainText
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    LogosButton {
-                        objectName: "qrStepButton"
-                        visible: (root.qr.label || "") !== ""
-                        text: root.qr.label || ""
-                        onClicked: backend.qrPress()
-                    }
-                    Item { Layout.fillWidth: true }
-                    LogosButton {
-                        objectName: "qrCancelButton"
-                        text: "Cancel"
-                        onClicked: backend.qrCancel()
-                    }
-                }
             }
 
-            LogosTextField {
-                id: pw
-                // Addressable by name: the doc-test harness locates fields with
-                // find_by "objectName", and a type name is not stable (QML
-                // decorates it, e.g. LogosTextField_QMLTYPE_18).
-                objectName: "vaultPasswordField"
-                visible: root.needsSecret
+            WalletsView {
                 Layout.fillWidth: true
-                echoMode: TextInput.Password
-                placeholderText: root.showing && backend.renderedCollects === "pin" ? "Card PIN" : "Vault password"
-
-                // Mask every character immediately. Qt's default reveals the
-                // last character typed for a second, which is exactly the
-                // character an onlooker needs. `passwordMaskDelay` lives on the
-                // inner TextInput -- LogosTextField does not re-expose it, but
-                // it does expose the input itself as a readonly alias, so set
-                // it there. Assigning it on the control fails to compile with
-                // "Cannot assign to non-existent property", which takes the
-                // WHOLE view down: a QML compile error means the plugin never
-                // renders at all.
-                Component.onCompleted: textInput.passwordMaskDelay = 0
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-                visible: root.needsSecret && backend.renderedCollects === "password" && backend.renderedAccount !== ""
-                LogosButton {
-                    objectName: "signerUnlockLink"
-                    text: "Unlock in the keys app…"
-                    onClicked: root.unlockInKeysApp()
-                }
-                LogosText {
-                    objectName: "unlockNote"
-                    visible: root.unlockNote !== ""
-                    Layout.fillWidth: true
-                    text: root.unlockNote
-                    textFormat: Text.PlainText
-                    wrapMode: Text.Wrap
-                    color: Theme.palette.textSecondary
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-                LogosButton {
-                    objectName: "signerRejectButton"
-                    text: "Reject"
-                    onClicked: { backend.reject(backend.renderedHandle); pw.text = "" }
-                }
-                LogosButton {
-                    objectName: "signerBackButton"
-                    text: "Back"
-                    // Read the handle BEFORE dismissing, which clears it. Walking away
-                    // without deciding leaves the request queued, so the requester is told
-                    // the same thing the user just did: not now.
-                    onClicked: {
-                        // A QR wallet's codes are drawn only here: leaving stops showing and reading
-                        // them, and so cancels its signature, rather than leave the camera waiting.
-                        if (root.qrDrawing) backend.qrCancel()
-                        root.answerIntent(backend.renderedHandle, false, "cancelled")
-                        backend.dismiss()
-                        pw.text = ""
-                    }
-                }
-                Item { Layout.fillWidth: true }
-                LogosButton {
-                    id: approveBtn
-                    objectName: "signerApproveButton"
-                    // The dwell flag is owned by C++, so editing this binding
-                    // cannot shorten it; the backend refuses early approvals
-                    // regardless of what the view believes.
-                    enabled: root.ready && backend.dwellElapsed && (!root.needsSecret || pw.text.length > 0)
-                             && backend.renderedSigning !== true
-                    text: backend.dwellElapsed ? "Approve" : "Reading…"
-                    onClicked: {
-                        backend.approve(backend.renderedHandle, backend.renderedBundleId,
-                                        root.needsSecret ? pw.text : "")
-                        pw.text = ""
-                    }
-                }
+                Layout.fillHeight: true
+                backend: root.ready ? root.backend : null
+                onUnlock: function (seed, openHandle) { root.openUnlock(seed, openHandle) }
+                onRule: function (seed) { root.openRule(seed, "rule") }
+                onKeys: function (seed) { root.openRule(seed, "keys") }
             }
         }
+    }
+
+    // ── sheets over the view ────────────────────────────────────────────────
+    Rectangle {
+        anchors.fill: parent
+        visible: unlockSheet.visible || ruleSheet.visible
+        color: "#80000000"
+        MouseArea { anchors.fill: parent }
+    }
+    UnlockSheet {
+        id: unlockSheet
+        visible: root.unlockSeed !== ""
+        anchors.centerIn: parent
+        width: Math.min(parent.width - 32, 640)
+        height: Math.min(parent.height - 32, implicitHeight)
+        backend: root.ready ? root.backend : null
+        seed: root.unlockSeed
+        openHandle: root.unlockOpen
+        after: root.unlockQueue.length
+        // Closed once the wallet is unlocked, by any way, and no open waits: the ask is met.
+        onClosed: root.closeUnlock(unlockSheet.unlocked && root.unlockOpen === "")
+        onSkipped: {
+            var next = root.nextQueued()
+            if (next !== "") root.unlockSeed = next
+            else root.closeUnlock(false)
+        }
+    }
+    RuleSheet {
+        id: ruleSheet
+        visible: root.ruleSeed !== ""
+        anchors.centerIn: parent
+        width: Math.min(parent.width - 32, 640)
+        height: Math.min(parent.height - 32, implicitHeight)
+        backend: root.ready ? root.backend : null
+        seed: root.ruleSeed
+        mode: root.ruleMode
+        onClosed: root.ruleSeed = ""
     }
 }

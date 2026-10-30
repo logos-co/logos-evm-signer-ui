@@ -67,6 +67,7 @@ Rectangle {
     // Start from the wallet's rule as it is.
     function reset() {
         inputs.clear()
+        nextIndex.checked = false
         passwordId = ""
         var ws = currentWays
         var and = ws.some(function (w) { return w.length === 2 && w.indexOf("device") >= 0 })
@@ -107,6 +108,10 @@ Rectangle {
             return w.indexOf("device") >= 0 && !sheet.currentWays.some(function (c) { return sheet.sameWay(c, w) })
         })
     }
+    // Only a QR wallet's answer leaves this computer, as a code someone could photograph; a new
+    // unlock key gains nothing for a card, a Shell or the keystore.
+    readonly property bool offersNewUnlockKey: mode === "keys" && newDeviceWay && wallet !== null
+        && (wallet.holders || []).some(function (h) { return h.kind === "qr" })
     // New keys wrap every way again, so each password in the rule is typed.
     readonly property var stepPasswords: {
         if (mode === "keys") {
@@ -131,7 +136,7 @@ Rectangle {
         var holder = inputs.holder ? inputs.holder.signer : ""
         var secret = sheet.newDeviceWay ? inputs.secret : ""
         if (mode === "keys") {
-            backend.changeKeys(seed, nextIndex.checked, sheet.newDeviceWay ? holder : "", secret, inputs.passwordsJson())
+            backend.changeKeys(seed, sheet.offersNewUnlockKey && nextIndex.checked, sheet.newDeviceWay ? holder : "", secret, inputs.passwordsJson())
             inputs.clear()
             return
         }
@@ -266,22 +271,22 @@ Rectangle {
         LogosText {
             visible: sheet.mode === "keys"
             Layout.fillWidth: true
-            text: "Every app re-encrypts its data for this wallet under new keys the next time it reads it. "
-                  + "Use this if a key may have been seen."
+            text: "Every app that keeps data for this wallet gets a new key for it, and re-encrypts the data "
+                  + "the next time it reads it. Do this if you think someone may have seen one of the current keys."
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
         }
         LogosCheckbox {
             id: nextIndex
             objectName: "keysNextIndex"
-            visible: sheet.mode === "keys" && sheet.newDeviceWay
-            text: "Also move to the device's next unlock key (if a QR wallet's answer may have been photographed)"
+            visible: sheet.offersNewUnlockKey
+            text: "Also change the wallet's unlock key, in case someone photographed a code your QR wallet showed"
         }
 
         LogosText {
             visible: sheet.newDeviceWay || sheet.stepPasswords.length > 0
             Layout.fillWidth: true
-            text: sheet.mode === "keys" ? "To wrap the new keys, this needs:" : "To set it, this needs:"
+            text: sheet.mode === "keys" ? "To make the new keys:" : "To set it, this needs:"
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             font.bold: true

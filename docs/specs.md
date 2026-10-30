@@ -189,8 +189,10 @@ each device's own app.
   before the rule that takes it.
 - **Passwords** are named, can unlock several wallets, and are added, renamed, changed and
   removed here; one a rule still takes can't be removed.
-- **New keys** wrap every way in again, so they need each way's factors; an option also moves to
-  the device's next unlock key, for when a QR wallet's answer may have been photographed.
+- **New keys** wrap every way in again, so they need each way's factors. For a wallet a QR wallet
+  holds, an option also moves to the device's next unlock key, for when the QR answer may have been
+  photographed. It isn't offered otherwise: a card's, a Shell's or the keystore's answer never
+  leaves this computer, and whoever could read it here could read the next one too.
 - **Lock** locks one wallet, **Lock all** every wallet.
 - **`wallets.unlock`** (`{ seeds?, signer?, openHandle? }`) opens the sheet for the wallet an open names,
   else for each locked one of `seeds`, or each locked wallet when it names none, one after another

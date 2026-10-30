@@ -92,14 +92,25 @@ ColumnLayout {
             }
         }
     }
-    LogosText {
-        objectName: "stepHolderHow"
+    // One holder: the same row as the choice above, without the choice.
+    RowLayout {
         visible: inputs.needsDevice && inputs.holders.length === 1 && inputs.holder !== null
         Layout.fillWidth: true
-        text: inputs.holder ? inputs.holderLabel(inputs.holder) + ": " + inputs.holderHow(inputs.holder) : ""
-        textFormat: Text.PlainText
-        wrapMode: Text.Wrap
-        color: Theme.palette.textSecondary
+        spacing: 8
+        LogosText {
+            objectName: "stepHolderLabel"
+            text: inputs.holder ? inputs.holderLabel(inputs.holder) : ""
+            textFormat: Text.PlainText
+        }
+        LogosText {
+            objectName: "stepHolderHow"
+            Layout.fillWidth: true
+            Layout.preferredWidth: 1
+            text: inputs.holder ? inputs.holderHow(inputs.holder) : ""
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+            color: Theme.palette.textSecondary
+        }
     }
     LogosTextField {
         id: secretField

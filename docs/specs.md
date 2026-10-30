@@ -105,9 +105,10 @@ implied.
 
 `acknowledge` names the account's signer, what it asks for (`password`, `pin`, or `nothing` for a
 device that asks the person itself) and whether an unlock covers the request. The sheet says so
-in one line, in the words `evm_signer_cli` uses, so one request reads alike on both:
-`Signer: keystore_module — asks for the account's password`, `— this account is unlocked: no
-password`, `— confirm on the device when it asks`, or `— asks for the card's PIN`.
+in one line, naming the signer as "Sign with" below does, and by its module id only when the
+manager doesn't list it: `Signs with: This device (Keystore) — asks for the account's password`,
+`— no password needed for this request`, `— confirm on the device when it asks`, or `— asks for
+the card's PIN`. `evm_signer_cli`'s `signer:` line keeps the module id.
 
 When several signers hold the account (the keystore, a Keycard in a reader, a Keycard Shell over
 USB, a QR wallet), the line becomes "Sign with": one row per signer, in the manager's order.
@@ -208,14 +209,12 @@ Passwords and PINs cross from this QML to this backend for the same reason the v
 the two are one trust unit, and only the backend talks to the manager. The backend sends them in
 one call and wipes its copies.
 
-## Signing without a password is the keys app's
+## Signing without a password is not offered
 
-The Signer never unlocks an account for signing. A request that needs the account's password also offers
-"Unlock in the keys app…", which raises `keystore.accounts.unlock` with the request's `account`
-(from `acknowledge`) and, as `app`, the module that asked; the person decides the terms there.
-When the keys app answers, the request is acknowledged again if it is still on screen, so an
-unlock that now covers it drops the password field. A cancel says nothing; any other refusal is
-said under the link. A card's PIN, or a device that asks the person itself, gets no link.
+The Signer never unlocks an account for signing, and no longer sends the person to the keys app to
+do it: "unlock" here means a wallet's data, in Wallets. The manager's unlock is still there for a
+custodian to grant (the e2e's probe does); a request it covers shows no password field, and the
+signer line says no password is needed.
 
 ## What the backend must never do
 

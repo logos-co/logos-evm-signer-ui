@@ -186,7 +186,6 @@ Item {
             var approved = state === "approved"
             root.answerIntent(handle, approved, approved ? "" : "cancelled")
         }
-        function onRenderedHandleChanged() { root.unlockNote = "" }
         // The sheet's step ended: the rule or keys sheet closes once done, and an unlock asked
         // for by an intent moves to the next wallet it asks for, or ends once the last is unlocked
         // and no open waits beside it.
@@ -203,22 +202,6 @@ Item {
         }
     }
 
-    // Unlocking is the keys app's. Send the person there for this request's account, for the
-    // app that asked; once it answers, read the request again, since an unlock may now cover it.
-    property string unlockNote: ""
-    function unlockInKeysApp() {
-        var handle = backend.renderedHandle
-        root.unlockNote = ""
-        logos.request("keystore.accounts.unlock",
-                      ({ account: backend.renderedAccount, app: backend.renderedRequester }), function (res) {
-            if (res.ok) {
-                if (backend.renderedHandle === handle) backend.acknowledge(handle)
-            } else if (res.error !== "cancelled") {
-                root.unlockNote = res.error === "unavailable" ? "No keys app could take this."
-                                                              : "The keys app did not unlock it (" + res.error + ")."
-            }
-        })
-    }
     Component.onCompleted: root.ready = root.backend !== null && logos.isViewModuleReady("evm_signer_ui")
     readonly property var queue: {
         try { return JSON.parse(backend ? backend.pendingJson : "[]") } catch (e) { return [] }
@@ -246,14 +229,15 @@ Item {
         repeat: true
         onTriggered: root.qrIndex = (root.qrIndex + 1) % root.qrFrames.length
     }
-    // The same words as evm_signer_cli's `signer:` line: one request reads alike on both.
+    // Who signs, named as in "Sign with"; a signer the manager doesn't list keeps its module id.
     readonly property string signerLine: {
         if (!showing || backend.renderedSigner === "") return ""
-        var how = backend.renderedUnlocked ? "this account is unlocked: no password"
+        var h = holders.filter(function (x) { return x.signer === backend.renderedSigner })[0]
+        var how = backend.renderedUnlocked ? "no password needed for this request"
                 : backend.renderedCollects === "nothing" ? "confirm on the device when it asks"
                 : backend.renderedCollects === "pin" ? "asks for the card's PIN"
                 : "asks for the account's password"
-        return "Signer: " + backend.renderedSigner + " — " + how
+        return "Signs with: " + (h ? holderName(h) : backend.renderedSigner) + " — " + how
     }
 
     // Every signer holding the account, ranked by the manager. With more than one, the person picks.
@@ -279,7 +263,7 @@ Item {
         if (h.canTake !== true) return h.why || "It can't sign this request."
         if (h.presence === "absent")
             return h.transport === "reader" ? "Insert the card in a reader to sign with it." : "Connect it to sign with it."
-        if (h.signer === backend.renderedSigner && backend.renderedUnlocked) return "This account is unlocked: no password."
+        if (h.signer === backend.renderedSigner && backend.renderedUnlocked) return "No password needed for this request."
         if (h.collects === "password") return "Asks for the account's password."
         if (h.collects === "pin") return "Asks for the card's PIN."
         if (h.transport === "qr") return "Shows the request as codes here, then reads its answer."
@@ -714,26 +698,6 @@ Item {
                         // WHOLE view down: a QML compile error means the plugin never
                         // renders at all.
                         Component.onCompleted: textInput.passwordMaskDelay = 0
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-                        visible: root.needsSecret && backend.renderedCollects === "password" && backend.renderedAccount !== ""
-                        LogosButton {
-                            objectName: "signerUnlockLink"
-                            text: "Unlock in the keys app…"
-                            onClicked: root.unlockInKeysApp()
-                        }
-                        LogosText {
-                            objectName: "unlockNote"
-                            visible: root.unlockNote !== ""
-                            Layout.fillWidth: true
-                            text: root.unlockNote
-                            textFormat: Text.PlainText
-                            wrapMode: Text.Wrap
-                            color: Theme.palette.textSecondary
-                        }
                     }
 
                     RowLayout {

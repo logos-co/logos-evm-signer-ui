@@ -51,8 +51,6 @@ class EvmSignerUi
     PROP(QString renderedSigner="" READONLY)
     PROP(QString renderedCollects="" READONLY)
     PROP(bool renderedUnlocked=false READONLY)
-    // The account it signs with: an address, or a Bitcoin wallet's id. What an unlock names.
-    PROP(QString renderedAccount="" READONLY)
     // Every signer holding the account, ranked, verbatim from the manager: `[{ signer, accountId,
     // kind, model, transport, presence, available, collects, showsRequest, canTake, why? }]`. The
     // person may sign with any that can take the request; `renderedSigner` is the one chosen, by

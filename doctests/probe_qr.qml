@@ -69,7 +69,6 @@ Item {
         property string renderedSignersJson: "[]"
         property bool renderedSignerExplicit: false
         property bool renderedUnlocked: false
-        property string renderedAccount: ""
         property bool renderedSigning: false
         property string unattendedJson: "[]"
         property var claimLines: []
@@ -90,7 +89,6 @@ Item {
             fake.renderedRequester = "bitcoin_wallet_backend"
             fake.renderedSigner = "qr_signer_module"
             fake.renderedCollects = "nothing"
-            fake.renderedAccount = "qr-73c5da0a-84-0-0"
             fake.renderLines = ["Commitment: abcd"]
             fake.renderedHandle = handle
             return true

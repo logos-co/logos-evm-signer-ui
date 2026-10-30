@@ -481,7 +481,6 @@ void EvmSignerUiBackend::applySigner(const QJsonObject &r)
     setRenderedSigner(r.value(QStringLiteral("signer")).toString());
     setRenderedCollects(r.value(QStringLiteral("collects")).toString());
     setRenderedUnlocked(r.value(QStringLiteral("unlocked")).toBool());
-    setRenderedAccount(r.value(QStringLiteral("account")).toString());
     setRenderedSignersJson(QString::fromUtf8(
         QJsonDocument(r.value(QStringLiteral("signers")).toArray()).toJson(QJsonDocument::Compact)));
     setRenderedSignerExplicit(r.value(QStringLiteral("explicit")).toBool());
@@ -734,7 +733,6 @@ void EvmSignerUiBackend::clearRendered()
     setRenderedSigner(QString());
     setRenderedCollects(QString());
     setRenderedUnlocked(false);
-    setRenderedAccount(QString());
     setRenderedSignersJson(QStringLiteral("[]"));
     setRenderedSignerExplicit(false);
     setRenderedSigning(false);

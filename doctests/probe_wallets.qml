@@ -95,7 +95,6 @@ Item {
         property string renderedSignersJson: "[]"
         property bool renderedSignerExplicit: false
         property bool renderedUnlocked: false
-        property string renderedAccount: ""
         property string unattendedJson: "[]"
         property var claimLines: []
         property var renderLines: []

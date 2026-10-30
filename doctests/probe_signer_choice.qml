@@ -73,7 +73,6 @@ Item {
         property string renderedSigner: ""
         property string renderedCollects: ""
         property bool renderedUnlocked: false
-        property string renderedAccount: ""
         property string renderedSignersJson: "[]"
         property bool renderedSignerExplicit: false
         property bool renderedSigning: false
@@ -96,7 +95,6 @@ Item {
             fake.holders = holders
             fake.renderedSigning = false
             fake.renderedRequester = "eth_wallet_backend"
-            fake.renderedAccount = "0xabc"
             fake.renderLines = ["Account: 0xabc", "Commitment: abcd"]
             fake.pick(holders[0].signer, false)
             fake.renderedHandle = handle
@@ -136,7 +134,19 @@ Item {
         console.log("an account only one signer holds reads as before: one line, nothing to choose")
         fake.show("smh_1", [probe.four[0]])
         check("the signer line shows", probe.find(view.item, "signerLine").visible, true)
+        check("...naming the holder as the chooser does", probe.find(view.item, "signerLine").text,
+              "Signs with: This device (Keystore) — asks for the account's password")
         check("...and no chooser", probe.find(view.item, "signWith").visible, false)
+        check("no way to the keys app to skip the password", probe.find(view.item, "signerUnlockLink"), null)
+    }
+
+    function assertASignerTheManagerDoesNotListKeepsItsId() {
+        console.log("")
+        console.log("a signer missing from the manager's list is named by its module id")
+        fake.show("smh_5", [probe.four[0]])
+        fake.renderedSigner = "other_signer_module"
+        check("the line", probe.find(view.item, "signerLine").text,
+              "Signs with: other_signer_module — asks for the account's password")
     }
 
     function assertEveryHolderIsOffered() {
@@ -194,7 +204,20 @@ Item {
         fake.renderedSigning = true
         check("no chooser", probe.find(view.item, "signWith").visible, false)
         check("the line names the Shell", probe.find(view.item, "signerLine").text,
-              "Signer: keycard_shell_module — confirm on the device when it asks")
+              "Signs with: Keycard Shell · USB — confirm on the device when it asks")
+    }
+
+    function assertACoveredRequestAsksNoPassword() {
+        console.log("")
+        console.log("the manager says this request needs no password: none is asked, and both lines say so")
+        fake.show("smh_6", [probe.four[0]])
+        fake.renderedUnlocked = true
+        check("the line", probe.find(view.item, "signerLine").text,
+              "Signs with: This device (Keystore) — no password needed for this request")
+        check("no password field", probe.password().visible, false)
+        fake.show("smh_7", probe.four)
+        check("the keystore's row", probe.part(0, "signWithHow").text, "No password needed for this request.")
+        fake.renderedUnlocked = false
     }
 
     Loader {
@@ -210,10 +233,12 @@ Item {
             item.ready = true
 
             probe.assertOneSignerKeepsTheLine()
+            probe.assertASignerTheManagerDoesNotListKeepsItsId()
             probe.assertEveryHolderIsOffered()
             probe.assertChoosingTheShellAsksNoPassword()
             probe.assertAHolderThatCannotTakeItSaysWhy()
             probe.assertNothingIsChosenWhileSigning()
+            probe.assertACoveredRequestAsksNoPassword()
 
             console.log("")
             console.log(probe.failures ? "RESULT: FAILURES" : "RESULT: ALL PASS")

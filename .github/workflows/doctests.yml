@@ -89,7 +89,7 @@ jobs:
           if grep -q "SKIP" /tmp/probe.log; then
             echo "::error::the view probe skipped instead of running"; exit 1
           fi
-          for probe in probe_intents probe_qr probe_sections probe_signer_choice probe_unlock_link; do
+          for probe in probe_intents probe_qr probe_sections probe_signer_choice; do
             grep -q -- "--- $probe.qml" /tmp/probe.log \
               || { echo "::error::probe never ran: $probe"; exit 1; }
           done

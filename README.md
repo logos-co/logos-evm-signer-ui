@@ -16,9 +16,8 @@ shown beside it for the person's consent. See `docs/specs.md`.
 It is wallet-agnostic by construction — its only REQUIRED dependency is
 `signer_manager_module`, so it has no client for any wallet, chain or RPC module
 and cannot be told what an intent means. It renders the lines the manager
-authored, verbatim, and takes the vault password. It never unlocks an account: a
-request whose account is locked can send the person to the keys app to unlock it,
-on their own terms, and is read again when they come back.
+authored, verbatim, and takes the vault password. It never unlocks an account for
+signing, and offers no way to sign without the password for now.
 
 It does ask one other module, optionally. `token_list_module` can say what the
 address being signed to is called and how its amounts scale, and those lines

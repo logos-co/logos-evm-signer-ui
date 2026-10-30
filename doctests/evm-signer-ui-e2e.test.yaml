@@ -398,16 +398,6 @@ sections:
               # VERIFIED -- measured, by building that mutant and running it.
               value: 14
 
-            - name: "Unlocking is the keys app's, and the way there is offered"
-              # The account comes from the manager's acknowledge. This host has no shell, so the
-              # link is not followed here; doctests/probe_unlock_link.qml drives it.
-              action: expect_property
-              find_by: "objectName"
-              find_value: "signerUnlockLink"
-              property: "visible"
-              value: true
-              timeout: 5000
-
             - name: "Type the vault password"
               action: set_text
               find_by: "objectName"
@@ -460,24 +450,17 @@ sections:
               timeout: 5000
               screenshot: "evm-signer-ui-approved.png"
 
-            - name: "Unlocked for this app: the signer says so, in the CLI's words"
+            - name: "Covered for this app: the signer line says no password is needed"
               # The probe, playing the keys app as the manager's custodian, unlocked the account
               # for its own requests with each signature confirmed, and asked again.
               action: wait_for
-              texts: ["Signer: keystore_module — this account is unlocked: no password"]
+              texts: ["Signs with: This device (Keystore) — no password needed for this request"]
               timeout: 20000
 
-            - name: "No password field while unlocked"
+            - name: "No password field while covered"
               action: expect_property
               find_by: "objectName"
               find_value: "vaultPasswordField"
-              property: "visible"
-              value: false
-
-            - name: "...and nothing to unlock"
-              action: expect_property
-              find_by: "objectName"
-              find_value: "signerUnlockLink"
               property: "visible"
               value: false
 
@@ -506,7 +489,7 @@ sections:
                 - "      Send 0.00060000 BTC to bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
                 - "      Change 0.00039000 BTC back to this wallet (m/84'/1'/0'/1/0, checked)"
                 - "      Fee 1,000 sats, about 7.1 sat/vB, computed from the inputs"
-                - "Signer: keystore_module — asks for the account's password"
+                - "Signs with: This device (Keystore) — asks for the account's password"
               timeout: 30000
               screenshot: "evm-signer-ui-bitcoin.png"
 
@@ -547,7 +530,7 @@ sections:
               action: wait_for
               texts:
                 - "Purpose (claimed by the requester): Doc-test: a regtest send, unlocked"
-                - "Signer: keystore_module — this account is unlocked: no password"
+                - "Signs with: This device (Keystore) — no password needed for this request"
               timeout: 30000
 
             - name: "No password field for the unlocked wallet"
@@ -576,7 +559,7 @@ sections:
               action: wait_for
               texts:
                 - "Purpose (claimed by the requester): Doc-test: sign on a device"
-                - "Signer: mock_device_signer — confirm on the device when it asks"
+                - "Signs with: software keys — confirm on the device when it asks"
               timeout: 30000
               screenshot: "evm-signer-ui-device.png"
 
@@ -584,13 +567,6 @@ sections:
               action: expect_property
               find_by: "objectName"
               find_value: "vaultPasswordField"
-              property: "visible"
-              value: false
-
-            - name: "...and nothing to unlock"
-              action: expect_property
-              find_by: "objectName"
-              find_value: "signerUnlockLink"
               property: "visible"
               value: false
 

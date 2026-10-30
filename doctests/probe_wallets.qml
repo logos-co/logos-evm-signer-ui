@@ -328,6 +328,31 @@ Item {
         fake.walletsJson = JSON.stringify(s)
     }
 
+    function assertOnlyAQrWalletIsOfferedANewUnlockKey() {
+        console.log("")
+        console.log("new keys: only a QR wallet's answer leaves this computer, so only it is offered a new unlock key")
+        view.item.openRule("s_qr", "keys")
+        var next = probe.visibleAll("keysNextIndex")
+        check("offered for a QR wallet", next.length, 1)
+        var label = probe.visibleAll("stepHolderLabel")
+        check("its one holder, named apart from what it does", label.length ? label[0].text : "", "QR wallet")
+        if (next.length) next[0].checked = true
+        probe.type("stepPasswordField", "homepass")
+        probe.click("ruleApply")
+        var args = fake.last("changeKeys")
+        check("...and taken when ticked", args ? args[1] : "", true)
+        probe.click("ruleClose")
+
+        view.item.openRule("s_card", "keys")
+        check("not offered for a card, even after a tick elsewhere", probe.visibleAll("keysNextIndex").length, 0)
+        probe.type("stepSecretField", "123456")
+        probe.click("ruleApply")
+        args = fake.last("changeKeys")
+        check("new keys through the card, same unlock key", args ? JSON.stringify(args.slice(0, 4)) : "",
+              JSON.stringify(["s_card", false, "keycard_module", "123456"]))
+        probe.click("ruleClose")
+    }
+
     function assertLockAllLocksEveryWallet() {
         console.log("")
         console.log("Lock all, once something is unlocked, locks every wallet")
@@ -439,6 +464,7 @@ Item {
             probe.assertAnOpenWaitsBesideItsWalletForConsent()
             probe.assertARuleWithANewPasswordCreatesItFirst()
             probe.assertAWalletCanBeLeftAlwaysUnlocked()
+            probe.assertOnlyAQrWalletIsOfferedANewUnlockKey()
             probe.assertLockAllLocksEveryWallet()
             probe.assertTheUnlockIntentEndsOnceTheWalletUnlocks()
             probe.assertTheUnlockIntentWalksEveryLockedWallet()

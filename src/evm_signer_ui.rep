@@ -119,8 +119,7 @@ class EvmSignerUi
     // above: this QML and this backend are one trust unit, and only the backend talks to the manager.
 
     // The manager's `wallet_settings`, verbatim: `{ wallets: [{ seed, name, privateName?, locked,
-    // holders, index, generation, ways: [{ id, factors }], origin?, birthday? }], passwords: [{ id,
-    // name, wallets }] }`.
+    // holders, index, generation, ways: [{ id, factors }] }], passwords: [{ id, name, wallets }] }`.
     PROP(QString walletsJson="{}" READONLY)
     // Every account once, verbatim from the manager's `roster`: each names its wallet as `seed`.
     PROP(QString rosterJson="[]" READONLY)

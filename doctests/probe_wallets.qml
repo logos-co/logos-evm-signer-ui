@@ -258,8 +258,13 @@ Item {
         check("the request's own lines", probe.findAll(view.item, "unlockOpenLine")[0].text,
               "bitcoin_wallet_core_module asks to open a Bitcoin wallet")
         check("no consent while locked", probe.find(view.item, "unlockOpenConsent").enabled, false)
+        check("no Close beside Refuse and Open", probe.visibleAll("unlockClose").length, 0)
+        fake.unlockJson = JSON.stringify({ handle: "smu_3", seed: "s_card", holder: "keycard_module", state: "device" })
+        check("...but a device step can be cancelled", probe.visibleAll("unlockClose").length, 1)
+        fake.unlockJson = "{}"
         probe.setUnlocked("s_card", false)
         check("consent once unlocked", probe.find(view.item, "unlockOpenConsent").enabled, true)
+        check("...still with no Close", probe.visibleAll("unlockClose").length, 0)
         probe.click("unlockOpenConsent")
         check("consent for that request", JSON.stringify(fake.last("consentOpen")),
               JSON.stringify(["sma_1", "bundle_open", ""]))

@@ -264,6 +264,8 @@ Rectangle {
             spacing: 8
             LogosButton {
                 objectName: "unlockClose"
+                // An app's open is answered by Refuse or Open; a device step keeps its Cancel.
+                visible: sheet.open === null || sheet.working || sheet.retyping
                 text: sheet.working ? "Cancel" : "Close"
                 onClicked: {
                     if (sheet.working || sheet.retyping) sheet.backend.cancelUnlock()

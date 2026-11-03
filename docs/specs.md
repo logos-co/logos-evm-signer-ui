@@ -175,8 +175,9 @@ each device's own app.
   step.
 - **An app's open** is shown in the sheet beside its wallet, in the manager's lines, verbatim.
   "Open it for that app" is the person's consent (`approve_access` without a password), armed
-  only once the wallet is unlocked; "Refuse" rejects it. An open that names no wallet lists the
-  unlocked wallets' accounts of the family asked for, and the person picks one.
+  only once the wallet is unlocked; "Refuse" rejects it. While it waits the sheet has no Close,
+  only a device step's Cancel. An open that names no wallet lists the unlocked wallets' accounts
+  of the family asked for, and the person picks one.
 - **Rules.** "Rule…" offers:
   - the device only;
   - the device and a password;

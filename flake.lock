@@ -12087,11 +12087,11 @@
         "qr_signer_module": "qr_signer_module"
       },
       "locked": {
-        "lastModified": 1793844202,
+        "lastModified": 1793879530,
         "narHash": "sha256-BwyE9HjG9ligKxWIIA3c2PiVcgX7rPzpgnOo5sJyCbA=",
         "owner": "logos-co",
         "repo": "logos-signer-manager-module",
-        "rev": "bb5416b573e146cbccdedad5b0ad9bb6966617b8",
+        "rev": "588cfb6621087ceb9b09f81c8c09f0e1269cceb0",
         "type": "github"
       },
       "original": {

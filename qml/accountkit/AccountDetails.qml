@@ -38,10 +38,11 @@ Item {
                 spacing: 8
                 LogosText {
                     objectName: row.namePrefix + "Name"
-                    // Shrinks before the number and badges do, and never past its own text.
+                    // Shrinks before the number and badges do, and never past its own text. Rounded
+                    // up: the layout snaps to whole pixels, and a fraction short elides it.
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1
-                    Layout.maximumWidth: implicitWidth
+                    Layout.maximumWidth: Math.ceil(implicitWidth)
                     text: Roster.rowTitle(row.entry)
                     textFormat: Text.PlainText
                     font.bold: true

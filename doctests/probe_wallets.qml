@@ -188,12 +188,45 @@ Item {
         console.log("")
         console.log("the Wallets tab lists every wallet with its holders and its rule, locked or not")
         view.item.page = 1
-        var names = probe.findAll(view.item, "walletName").map(function (t) { return t.text })
+        var names = probe.findAll(view.item, "walletTitle").map(function (t) { return t.text })
         check("both wallets are listed", JSON.stringify(names), JSON.stringify(["Card", "Keystone"]))
-        var rules = probe.findAll(view.item, "walletRule").map(function (t) { return t.text })
-        check("device only", rules[0], "Unlocks with the device.")
-        check("device and a password", rules[1], "Unlocks with the device and the password “Home”.")
+        var rules = probe.findAll(view.item, "walletLine_0").map(function (t) { return t.text })
+        check("its holders, and device only", rules[0], "Held by Keycard, Keycard Shell · Unlocks with the device.")
+        check("device and a password", rules[1], "Held by QR wallet · Unlocks with the device and the password “Home”.")
+        check("locked: no Wallet ID, no accounts", probe.visibleAll("walletWalletId").length + probe.visibleAll("walletAccount_0").length, 0)
+        check("...and Unlock… on each", probe.visibleAll("walletAction_unlock").length, 2)
         check("nothing to lock yet", probe.find(view.item, "lockAllButton").enabled, false)
+    }
+
+    function assertAnUnlockedWalletShowsItsIdAndAccounts() {
+        console.log("")
+        console.log("unlocked, a wallet shows its Wallet ID and one row per account: path, and address or")
+        console.log("first receiving address, as the Keycard and Keys apps show them")
+        fake.rosterJson = JSON.stringify([
+            { key: "btc_1", seed: "s_card", family: "bitcoin", chain: "test", address: null, path: "m/84'/1'/0'", label: "",
+              firstAddress: "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl", wallet: { fingerprint: "73c5da0a", name: "Card" }, holders: [] },
+            { key: "0x9858effd232b4033e47d90003d41ec34ecaeda94", seed: "s_card", family: "evm", chain: null,
+              address: "0x9858EfFD232B4033E47d90003D41EC34EcaEda94", path: "m/44'/60'/0'/0/0", label: "Savings",
+              wallet: { fingerprint: "73c5da0a", name: "Card" }, holders: [] },
+            { key: "0xother", seed: "s_qr", family: "evm", address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", path: "m/44'/60'/0'/0/0",
+              wallet: { fingerprint: "deadbeef" }, holders: [] }
+        ])
+        probe.setUnlocked("s_card", false)
+        check("its Wallet ID, the master fingerprint", probe.visibleAll("walletWalletId").map(function (o) { return o.text }).join(), "73c5da0a")
+        check("Ethereum first", probe.visibleAll("walletAccount_0_Name")[0].text + " " + probe.visibleAll("walletAccount_0_Path")[0].text,
+              "Savings m/44'/60'/0'/0/0")
+        check("...its address", probe.visibleAll("walletAccount_0_Address")[0].text, "0x9858…da94")
+        check("then Bitcoin, unnamed, with its number", probe.visibleAll("walletAccount_1_Name")[0].text + " · " + probe.visibleAll("walletAccount_1_Id")[0].text,
+              "Bitcoin · account 0")
+        check("...its first receiving address", probe.visibleAll("walletAccount_1_AddressLabel")[0].text + " " + probe.visibleAll("walletAccount_1_Address")[0].text,
+              "First receiving address (testnet/signet, 0/0) tb1q6r…pvkl")
+        check("the locked wallet's accounts stay hidden", probe.visibleAll("walletAccount_2").length, 0)
+        check("Lock, Names…, Rule… and New keys… once unlocked",
+              ["lock", "names", "rule", "keys"].map(function (a) { return probe.visibleAll("walletAction_" + a).length }).join(), "1,2,1,1")
+        probe.click("walletAction_lock")
+        check("Lock locks this one", JSON.stringify(fake.last("lockWallets")), JSON.stringify([JSON.stringify(["s_card"])]))
+        probe.setUnlocked("s_card", true)
+        fake.rosterJson = "[]"
     }
 
     function assertACardAsksForItsPinAndTheShellForAPress() {
@@ -252,8 +285,9 @@ Item {
         console.log("consent is armed only once the wallet is unlocked")
         fake.opensJson = JSON.stringify([{ handle: "sma_1", requester: "bitcoin_wallet_core_module", kind: "open",
                                            state: "offered", ageMs: 10, seed: "s_card" }])
-        check("listed under the card's wallet", probe.findAll(view.item, "walletOpen").length, 1)
-        probe.click("walletOpenReview")
+        check("listed under the card's wallet", probe.visibleAll("walletStrip_0").length, 1)
+        check("...as who asks", probe.visibleAll("walletStrip_0_Text")[0].text, "bitcoin_wallet_core_module asks to open this wallet")
+        probe.click("walletStrip_0_Action_review")
         check("shown in the sheet", JSON.stringify(fake.last("showOpen")), JSON.stringify(["sma_1"]))
         check("the request's own lines", probe.findAll(view.item, "unlockOpenLine")[0].text,
               "bitcoin_wallet_core_module asks to open a Bitcoin wallet")
@@ -318,8 +352,9 @@ Item {
         fake.walletsJson = JSON.stringify(s)
         var states = probe.findAll(view.item, "walletState").map(function (o) { return o.text })
         check("shown as always unlocked", states.indexOf("Always unlocked") >= 0, true)
-        var rules = probe.findAll(view.item, "walletRule").map(function (o) { return o.text })
-        check("...and why", rules.indexOf("Always unlocked: its data here isn't protected.") >= 0, true)
+        var rules = probe.findAll(view.item, "walletLine_0").map(function (o) { return o.text })
+        check("...and why", rules.indexOf("Held by Keycard, Keycard Shell · Always unlocked: its data here isn't protected.") >= 0, true)
+        check("...with no Lock", probe.visibleAll("walletAction_lock").length, 0)
         view.item.openRule("s_card", "rule")
         check("its rule sheet starts on it", probe.visibleAll("ruleChoice")[3].checked, true)
         probe.click("ruleClose")
@@ -463,6 +498,7 @@ Item {
             item.ready = true
 
             probe.assertEachWalletSaysHowItUnlocks()
+            probe.assertAnUnlockedWalletShowsItsIdAndAccounts()
             probe.assertACardAsksForItsPinAndTheShellForAPress()
             probe.assertAMistypedPasswordIsTypedAgainWithoutTheDevice()
             probe.assertAnOpenWaitsBesideItsWalletForConsent()

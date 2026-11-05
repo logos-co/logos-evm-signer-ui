@@ -20134,11 +20134,11 @@
         "qr_signer_module": "qr_signer_module"
       },
       "locked": {
-        "lastModified": 1793220047,
-        "narHash": "sha256-kmRfrQPQquEdefALjbgcjlQGjAmueJqP7GSVS3mBCH8=",
+        "lastModified": 1793844202,
+        "narHash": "sha256-BwyE9HjG9ligKxWIIA3c2PiVcgX7rPzpgnOo5sJyCbA=",
         "owner": "logos-co",
         "repo": "logos-signer-manager-module",
-        "rev": "9be21c3aeaa68ba915d36bfb67b5ed563585b9b7",
+        "rev": "bb5416b573e146cbccdedad5b0ad9bb6966617b8",
         "type": "github"
       },
       "original": {

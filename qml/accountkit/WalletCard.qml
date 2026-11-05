@@ -171,7 +171,6 @@ Frame {
                             required property var modelData
                             spec: modelData
                             prefix: strip.prefix
-                            compact: true
                             onClicked: card.stripAction(strip.index, spec.id)
                         }
                     }

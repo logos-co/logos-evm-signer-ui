@@ -127,7 +127,6 @@ Item {
                 required property var modelData
                 objectName: row.namePrefix + "Action_" + Roster.actionName(modelData)
                 text: modelData.label
-                compact: true
                 enabled: modelData.enabled
                 ToolTip.text: modelData.tip
                 ToolTip.visible: hovered && modelData.tip.length > 0

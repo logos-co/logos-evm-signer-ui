@@ -17,7 +17,7 @@ Frame {
     property string stateText: ""
     // Who holds it, or how it unlocks.
     property var lines: []
-    // A device in use, a phrase kept here, a warning: [{ text, warn, actions }].
+    // A device in use, a phrase kept here, a warning: [{ id, text, warn, actions }].
     property var strips: []
     property bool locked: false
     property string lockedText: "Locked · its ID and accounts show once you unlock it in the Signer app."
@@ -141,8 +141,10 @@ Frame {
                 id: strip
                 required property var modelData
                 required property int index
-                readonly property string prefix: card.namePrefix + "Strip_" + index + "_"
-                objectName: card.namePrefix + "Strip_" + index
+                // Named by its id when it has one, so a strip's name doesn't shift with the others.
+                readonly property string key: Roster.text(modelData && modelData.id) || String(index)
+                readonly property string prefix: card.namePrefix + "Strip_" + key + "_"
+                objectName: card.namePrefix + "Strip_" + key
                 Layout.fillWidth: true
                 implicitHeight: stripRow.implicitHeight + 2 * Theme.spacing.small
                 radius: 6

@@ -128,6 +128,8 @@ Item {
                 objectName: row.namePrefix + "Action_" + Roster.actionName(modelData)
                 text: modelData.label
                 enabled: modelData.enabled
+                // Compact where the app's design system has it; older pins lack the property.
+                Component.onCompleted: if ("compact" in this) this["compact"] = true
                 ToolTip.text: modelData.tip
                 ToolTip.visible: hovered && modelData.tip.length > 0
                 ToolTip.delay: 400

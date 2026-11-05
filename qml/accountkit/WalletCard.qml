@@ -171,6 +171,7 @@ Frame {
                             required property var modelData
                             spec: modelData
                             prefix: strip.prefix
+                            Component.onCompleted: if ("compact" in this) this["compact"] = true
                             onClicked: card.stripAction(strip.index, spec.id)
                         }
                     }

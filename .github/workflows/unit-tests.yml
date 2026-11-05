@@ -31,3 +31,15 @@ jobs:
           # A file that stops asserting must not pass by staying quiet.
           n=$(grep -c "  PASS  " /tmp/unit.log)
           echo "assertions: $n"; [ "$n" -ge 35 ]
+
+  accountkit:
+    name: qml/accountkit is logos-account-kit as pinned
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: scripts/check.sh at the pinned commit
+        run: |
+          set -euo pipefail
+          git clone -q https://github.com/logos-co/logos-account-kit "$RUNNER_TEMP/accountkit"
+          git -C "$RUNNER_TEMP/accountkit" checkout -q "$(cat qml/accountkit/VERSION)"
+          "$RUNNER_TEMP/accountkit/scripts/check.sh" .

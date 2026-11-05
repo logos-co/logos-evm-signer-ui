@@ -3,6 +3,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import Logos.Controls
 import Logos.Theme
+import "accountkit" as Accounts
 
 // Every wallet, whichever signers hold it: its names, its holders, how it unlocks, its accounts
 // once unlocked, and the apps waiting to open it. Device setup stays in each device's own app.
@@ -27,6 +28,12 @@ ColumnLayout {
     readonly property bool anyUnlocked: wallets.some(function (w) { return !w.locked })
 
     function accountsOf(seed) { return roster.filter(function (a) { return a.seed === seed }) }
+    // The master fingerprint its accounts carry: the Wallet ID every holder's app shows.
+    function fingerprintOf(entries) {
+        for (var i = 0; i < entries.length; i++)
+            if (entries[i].wallet && entries[i].wallet.fingerprint) return entries[i].wallet.fingerprint
+        return ""
+    }
     function opensOf(seed) { return opens.filter(function (o) { return (o.seed || "") === seed }) }
     function holderLabel(h) {
         var named = { keystore: "Keystore", keycard: "Keycard", keycard_shell: "Keycard Shell", qr: "QR wallet" }
@@ -38,7 +45,7 @@ ColumnLayout {
             var l = holderLabel(w.holders[i])
             if (seen.indexOf(l) < 0) { seen.push(l); out.push(l) }
         }
-        return "Held by: " + out.join(", ")
+        return "Held by " + out.join(", ")
     }
     function ruleText(w) {
         var keystore = (w.holders || []).length > 0 && w.holders.every(function (h) { return h.kind === "keystore" })
@@ -108,168 +115,80 @@ ColumnLayout {
 
             Repeater {
                 model: view.wallets
-                delegate: Rectangle {
+                delegate: Accounts.WalletCard {
                     id: card
-                    objectName: "walletCard"
                     required property var modelData
                     readonly property var w: modelData
+                    readonly property var mine: view.accountsOf(w.seed)
+                    readonly property var waiting: view.opensOf(w.seed)
                     Layout.fillWidth: true
-                    color: "transparent"
-                    border.color: "#8888aa"
-                    border.width: 1
-                    radius: 4
-                    implicitHeight: cardBody.implicitHeight + 20
+                    namePrefix: "wallet"
+                    title: w.privateName || w.name
+                    fingerprint: view.fingerprintOf(mine)
+                    stateText: w.alwaysUnlocked ? "Always unlocked" : w.locked ? "Locked" : "Unlocked"
+                    lines: [view.holdersText(w) + " · " + view.ruleText(w)]
+                           .concat(w.privateName ? ["Shown as “" + w.name + "” while locked"] : [])
+                    locked: w.locked
+                    lockedText: "Locked · its ID and accounts show once you unlock it."
+                    accounts: w.locked ? [] : mine
+                    // An app waiting to open this wallet.
+                    strips: waiting.map(function (o) {
+                        return { text: o.requester + " asks to open this wallet", actions: [{ id: "review", label: "Review" }] }
+                    })
+                    leftActions: w.locked ? [{ id: "unlock", label: "Unlock…" }]
+                                          : w.alwaysUnlocked ? [] : [{ id: "lock", label: "Lock" }]
+                    rightActions: [{ id: "names", label: "Names…" }]
+                                  .concat(w.locked ? [] : [{ id: "rule", label: "Rule…" }])
+                                  .concat(!w.locked && (w.ways || []).length > 0 ? [{ id: "keys", label: "New keys…" }] : [])
+                    onAction: function (id) {
+                        if (id === "unlock") view.unlock(card.w.seed, "")
+                        else if (id === "lock") view.backend.lockWallets(JSON.stringify([card.w.seed]))
+                        else if (id === "names") view.editing = view.editing === card.w.seed ? "" : card.w.seed
+                        else if (id === "rule") view.rule(card.w.seed)
+                        else if (id === "keys") view.keys(card.w.seed)
+                    }
+                    onStripAction: function (i, id) { view.unlock(card.w.seed, card.waiting[i].handle) }
 
-                    ColumnLayout {
-                        id: cardBody
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 4
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            LogosText {
-                                objectName: "walletName"
-                                Layout.fillWidth: true
-                                text: card.w.privateName || card.w.name
-                                textFormat: Text.PlainText
-                                elide: Text.ElideRight
-                                font.bold: true
-                            }
-                            LogosText {
-                                objectName: "walletState"
-                                text: card.w.alwaysUnlocked ? "Always unlocked" : card.w.locked ? "Locked" : "Unlocked"
-                                textFormat: Text.PlainText
-                                color: card.w.locked ? Theme.palette.textSecondary : Theme.palette.text
-                            }
+                // ── names ──────────────────────────────────────────
+                ColumnLayout {
+                    visible: view.editing === card.w.seed
+                    Layout.fillWidth: true
+                    spacing: 4
+                    LogosTextField {
+                        id: publicName
+                        objectName: "walletPublicName"
+                        Layout.fillWidth: true
+                        text: card.w.name
+                        placeholderText: "Name shown while locked"
+                    }
+                    LogosTextField {
+                        id: privateName
+                        objectName: "walletPrivateName"
+                        visible: !card.w.locked
+                        Layout.fillWidth: true
+                        text: card.w.privateName || ""
+                        placeholderText: "Private name, shown only once unlocked (optional)"
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Item { Layout.fillWidth: true }
+                        LogosButton {
+                            text: "Cancel"
+                            onClicked: view.editing = ""
                         }
-                        LogosText {
-                            visible: !!card.w.privateName
-                            Layout.fillWidth: true
-                            text: "Shown as “" + card.w.name + "” while locked"
-                            textFormat: Text.PlainText
-                            wrapMode: Text.Wrap
-                            color: Theme.palette.textSecondary
-                        }
-                        LogosText {
-                            Layout.fillWidth: true
-                            text: view.holdersText(card.w)
-                            textFormat: Text.PlainText
-                            wrapMode: Text.Wrap
-                        }
-                        LogosText {
-                            objectName: "walletRule"
-                            Layout.fillWidth: true
-                            text: view.ruleText(card.w)
-                            textFormat: Text.PlainText
-                            wrapMode: Text.Wrap
-                        }
-                        Repeater {
-                            model: card.w.locked ? [] : view.accountsOf(card.w.seed)
-                            delegate: LogosText {
-                                objectName: "walletAccount"
-                                Layout.fillWidth: true
-                                text: view.accountLine(modelData, card.w.name)
-                                textFormat: Text.PlainText
-                                elide: Text.ElideMiddle
-                                color: Theme.palette.textSecondary
-                            }
-                        }
-                        Repeater {
-                            model: view.opensOf(card.w.seed)
-                            delegate: RowLayout {
-                                objectName: "walletOpen"
-                                Layout.fillWidth: true
-                                LogosText {
-                                    Layout.fillWidth: true
-                                    text: modelData.requester + " asks to open this wallet"
-                                    textFormat: Text.PlainText
-                                    wrapMode: Text.Wrap
-                                }
-                                LogosButton {
-                                    objectName: "walletOpenReview"
-                                    text: "Review"
-                                    onClicked: view.unlock(card.w.seed, modelData.handle)
-                                }
-                            }
-                        }
-
-                        // ── names ──────────────────────────────────────────
-                        ColumnLayout {
-                            visible: view.editing === card.w.seed
-                            Layout.fillWidth: true
-                            spacing: 4
-                            LogosTextField {
-                                id: publicName
-                                objectName: "walletPublicName"
-                                Layout.fillWidth: true
-                                text: card.w.name
-                                placeholderText: "Name shown while locked"
-                            }
-                            LogosTextField {
-                                id: privateName
-                                objectName: "walletPrivateName"
-                                visible: !card.w.locked
-                                Layout.fillWidth: true
-                                text: card.w.privateName || ""
-                                placeholderText: "Private name, shown only once unlocked (optional)"
-                            }
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Item { Layout.fillWidth: true }
-                                LogosButton {
-                                    text: "Cancel"
-                                    onClicked: view.editing = ""
-                                }
-                                LogosButton {
-                                    objectName: "walletNamesSave"
-                                    enabled: publicName.text.trim().length > 0
-                                    text: "Save"
-                                    onClicked: {
-                                        // A locked wallet's private name can't be read, so it is left as it is.
-                                        if (card.w.locked) view.backend.setNames(card.w.seed, publicName.text, "")
-                                        else view.backend.setNames(card.w.seed, publicName.text, privateName.text)
-                                        view.editing = ""
-                                    }
-                                }
-                            }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
-                            LogosButton {
-                                objectName: "walletUnlock"
-                                visible: card.w.locked
-                                text: "Unlock…"
-                                onClicked: view.unlock(card.w.seed, "")
-                            }
-                            LogosButton {
-                                objectName: "walletLock"
-                                visible: !card.w.locked && !card.w.alwaysUnlocked
-                                text: "Lock"
-                                onClicked: view.backend.lockWallets(JSON.stringify([card.w.seed]))
-                            }
-                            Item { Layout.fillWidth: true }
-                            LogosButton {
-                                objectName: "walletNames"
-                                text: "Names…"
-                                onClicked: view.editing = view.editing === card.w.seed ? "" : card.w.seed
-                            }
-                            LogosButton {
-                                objectName: "walletRuleButton"
-                                visible: !card.w.locked
-                                text: "Rule…"
-                                onClicked: view.rule(card.w.seed)
-                            }
-                            LogosButton {
-                                objectName: "walletKeys"
-                                visible: !card.w.locked && (card.w.ways || []).length > 0
-                                text: "New keys…"
-                                onClicked: view.keys(card.w.seed)
+                        LogosButton {
+                            objectName: "walletNamesSave"
+                            enabled: publicName.text.trim().length > 0
+                            text: "Save"
+                            onClicked: {
+                                // A locked wallet's private name can't be read, so it is left as it is.
+                                if (card.w.locked) view.backend.setNames(card.w.seed, publicName.text, "")
+                                else view.backend.setNames(card.w.seed, publicName.text, privateName.text)
+                                view.editing = ""
                             }
                         }
                     }
+                }
                 }
             }
 

@@ -162,6 +162,13 @@ once unlocked; its holders; how it unlocks; its accounts once unlocked (from `ro
 `seed`); and the apps waiting to open it (`access_requests`, by `seed`). Device setup stays in
 each device's own app.
 
+Each wallet is [logos-account-kit](https://github.com/logos-co/logos-account-kit)'s
+`WalletCard`, vendored in `qml/accountkit`, as in the Keycard and Keys apps:
+- its **Wallet ID** is the master fingerprint its accounts carry (`wallet.fingerprint`);
+- each account row shows its name and number, derivation path, and address: an EVM account's own,
+  or a Bitcoin account's first receiving address (0/0), from the roster's `firstAddress`;
+- a locked wallet shows neither, since its accounts aren't in `roster` until it unlocks.
+
 - **The Unlock sheet** offers the wallet's ways in and asks for what the chosen one takes:
   - which holder to ask when it takes the device;
   - the card's PIN, or the keystore's password;

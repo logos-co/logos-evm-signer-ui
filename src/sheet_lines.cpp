@@ -8,7 +8,6 @@ namespace sheet {
 
 namespace {
 
-bool asciiDigit(char c) { return c >= '0' && c <= '9'; }
 bool startsWith(const std::string &s, const std::string &p) { return s.compare(0, p.size(), p) == 0; }
 
 constexpr uint64_t kCoin = 100000000;

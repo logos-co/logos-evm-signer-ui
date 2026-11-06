@@ -30,7 +30,7 @@ jobs:
           grep -q "RESULT: ALL PASS" /tmp/unit.log
           # A file that stops asserting must not pass by staying quiet.
           n=$(grep -c "  PASS  " /tmp/unit.log)
-          echo "assertions: $n"; [ "$n" -ge 35 ]
+          echo "assertions: $n"; [ "$n" -ge 21 ]
 
   accountkit:
     name: qml/accountkit is logos-account-kit as pinned

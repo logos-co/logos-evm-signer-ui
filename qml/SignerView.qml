@@ -444,11 +444,8 @@ Item {
                             Section {
                                 objectName: "sectionRequester"
                                 number: 1
-                                // The name is the installed package's, never the requester's; the id always follows.
-                                heading: "Requested by: " + (!root.ready ? ""
-                                         : backend.renderedRequesterName
-                                           ? backend.renderedRequesterName + " (" + backend.renderedRequester + ")"
-                                           : backend.renderedRequester)
+                                // The module id the manager gave, never a name the requester chose.
+                                heading: "Requested by: " + (root.ready ? backend.renderedRequester : "")
                                 caption: "What that app says this is for. Its own words — this " +
                                          "signer cannot check any of it."
 

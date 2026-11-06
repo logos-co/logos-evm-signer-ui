@@ -27,10 +27,8 @@ constexpr int kConfirmSeconds = 30;
 
 /// The signer module whose requests are drawn here as QR codes.
 const QString kQrSigner = QStringLiteral("qr_signer_module");
-/// How often a QR wallet's session is read: often while it shows or reads codes, else just enough
-/// to keep the scanner's claim (fresh for 10 s) while the request awaits approval.
+/// How often a QR wallet's session is read while it shows or reads codes.
 constexpr int kQrDrawMs = 150;
-constexpr int kQrHoldMs = 3000;
 /// How often a wallet's device step is read while its holder works.
 constexpr int kUnlockPollMs = 400;
 /// The Wallets view's backstop; events are the fast path.
@@ -226,36 +224,6 @@ QStringList EvmSignerUiBackend::tokenListLines(const QJsonObject &leg) const
         }
     }
     return out;
-}
-
-void EvmSignerUiBackend::nameRequester(const QString &handle, const QString &module)
-{
-    if (module.isEmpty()) {
-        return;
-    }
-    // What the user installed, never the request. Asked without waiting: the id shows at once, the
-    // name joins it when package_manager answers, and with none installed nothing waits at all.
-    QPointer<EvmSignerUiBackend> self(this);
-    modules().package_manager.getInstalledPackagesAsyncResult(
-        [self, handle, module](logos::AsyncResult<QVariantList> res) {
-            if (!self || !res.error.ok()) {
-                return;
-            }
-            std::vector<std::pair<std::string, std::string>> installed;
-            for (const QVariant &p : res.value) {
-                const QVariantMap m = p.toMap();
-                installed.emplace_back(m.value(QStringLiteral("name")).toString().toStdString(),
-                                       m.value(QStringLiteral("displayName")).toString().toStdString());
-            }
-            const QString name = QString::fromStdString(sheet::installedName(module.toStdString(), installed));
-            QMetaObject::invokeMethod(self, [self, handle, module, name] {
-                // Only onto the request it was asked for, if that is still the one on screen.
-                if (self && self->renderedHandle() == handle && self->renderedRequester() == module) {
-                    self->setRenderedRequesterName(name);
-                }
-            }, Qt::QueuedConnection);
-        },
-        Timeout(2000));
 }
 
 void EvmSignerUiBackend::onContextReady()
@@ -458,10 +426,6 @@ bool EvmSignerUiBackend::acknowledge(QString handle)
 
     setLastError(QString());
     setClaimLines(claims);
-    // A name belongs to one request: gone before another's id shows, and asked for again below.
-    if (r.value(QStringLiteral("handle")).toString() != renderedHandle()) {
-        setRenderedRequesterName(QString());
-    }
     setRenderedRequester(r.value(QStringLiteral("requester")).toString());
     setRenderedBundleId(r.value(QStringLiteral("bundle_id")).toString());
     setClaimLines(claims);
@@ -469,7 +433,6 @@ bool EvmSignerUiBackend::acknowledge(QString handle)
     setInterpretationLines(interpret(lines));
     applySigner(r);
     setRenderedHandle(r.value(QStringLiteral("handle")).toString());
-    nameRequester(renderedHandle(), renderedRequester());
     startDwell();
     return true;
 }
@@ -642,17 +605,8 @@ void EvmSignerUiBackend::dismiss()
 
 void EvmSignerUiBackend::qrClaim()
 {
-    if (m_qrHandle.isEmpty()) {
-        // Where the scanner isn't installed, or won't have this app draw, the answer is no handle:
-        // a QR wallet's request then shows in the scanner's own window, as before.
-        const QString h = modules().qr_scanner_module.presenter_attach();
-        if (!h.startsWith(QStringLiteral("prs_"))) {
-            return;
-        }
-        m_qrHandle = h;
-        m_qrFramesId.clear();
-    }
-    m_qrPoll.start(renderedSigning() || qrUnlocking() ? kQrDrawMs : kQrHoldMs);
+    // qr_scanner_module is not a dependency while the QR signer is unreleased, so nothing is
+    // claimed: a QR wallet's request shows in the scanner's own window, as with no scanner.
 }
 
 void EvmSignerUiBackend::qrRelease()
@@ -661,60 +615,22 @@ void EvmSignerUiBackend::qrRelease()
     setQrJson(QStringLiteral("{}"));
     setQrFramesJson(QStringLiteral("[]"));
     m_qrFramesId.clear();
-    if (m_qrHandle.isEmpty()) {
-        return;
-    }
-    // Called from the manager's settled event too, which runs on the IPC read stack: a call out
-    // from there deadlocks its own reply, so the scanner is let go from a clean stack.
-    const QString h = m_qrHandle;
     m_qrHandle.clear();
-    QTimer::singleShot(0, this, [this, h] { modules().qr_scanner_module.presenter_detach(h); });
 }
 
 void EvmSignerUiBackend::qrPoll()
 {
-    if (m_qrHandle.isEmpty() || m_qrInFlight) {
-        return;
-    }
-    m_qrInFlight = true;
-    const auto done = qScopeGuard([this] { m_qrInFlight = false; });
-    QJsonObject v = parseObject(modules().qr_scanner_module.presenter_view(m_qrHandle, m_qrFramesId));
-    if (!v.value(QStringLiteral("ok")).toBool()) {
-        // The claim lapsed (a long stall) or the scanner went: claim again on the next read.
-        m_qrHandle.clear();
-        qrClaim();
-        return;
-    }
-    if (v.contains(QStringLiteral("frames"))) {
-        setQrFramesJson(QString::fromUtf8(
-            QJsonDocument(v.value(QStringLiteral("frames")).toArray()).toJson(QJsonDocument::Compact)));
-        m_qrFramesId = v.value(QStringLiteral("frames_id")).toString();
-        v.remove(QStringLiteral("frames"));
-    }
-    v.remove(QStringLiteral("ok"));
-    setQrJson(QString::fromUtf8(QJsonDocument(v).toJson(QJsonDocument::Compact)));
+    // Nothing to read: no claim is held (see qrClaim).
 }
 
 bool EvmSignerUiBackend::qrPress()
 {
-    if (m_qrHandle.isEmpty()) {
-        return false;
-    }
-    const bool pressed = modules().qr_scanner_module.presenter_press(m_qrHandle) == QStringLiteral("pressed");
-    qrPoll();
-    return pressed;
+    return false;
 }
 
 bool EvmSignerUiBackend::qrCancel()
 {
-    if (m_qrHandle.isEmpty()) {
-        return false;
-    }
-    // The wallet's session ends; the QR signer then refuses the job, and the manager's settled
-    // event ends the sheet as for any other outcome.
-    const QJsonObject r = parseObject(modules().qr_scanner_module.presenter_cancel(m_qrHandle));
-    qrPoll();
-    return r.value(QStringLiteral("cancelled")).toBool();
+    return false;
 }
 
 void EvmSignerUiBackend::clearRendered()
@@ -729,7 +645,6 @@ void EvmSignerUiBackend::clearRendered()
     setRenderedHandle(QString());
     setRenderedBundleId(QString());
     setRenderedRequester(QString());
-    setRenderedRequesterName(QString());
     setRenderedSigner(QString());
     setRenderedCollects(QString());
     setRenderedUnlocked(false);

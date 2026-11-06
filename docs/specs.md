@@ -63,16 +63,8 @@ expecting the latter will be wrong.
 ## Who asked
 
 Section 1 names the requester by the id `acknowledge` gives as `requester`: the caller's module
-name, as the platform identified it. When `package_manager` is installed, the backend asks it
-which installed package has that name, and shows that package's `display_name` before the id:
-"Requested by: Bitcoin Wallet Core (bitcoin_wallet_core_module)".
-
-- The name never comes from the request. The requester writes its `purpose`, which stays in the
-  section's body, and nothing in the heading.
-- It is still a name a package's author chose. So the id always follows it, and the name is
-  dropped unless it is short plain ASCII (letters, digits, single spaces and `- . '`) and no other
-  installed package wears it too, compared by letters and digits in any case.
-- With no package manager, no name, or a dropped one, the heading is the id alone.
+name, as the platform identified it ("Requested by: bitcoin_wallet_core_module"). Nothing in the
+heading comes from the request: the requester's `purpose` stays in the section's body.
 
 ## Section 3 for a Bitcoin request
 
@@ -133,7 +125,9 @@ is still working on keeps the sheet up, reading "Confirm on the signing device",
 disabled and a line saying the request stays until the device answers. The manager's settle
 event ends it.
 
-A QR wallet's request (signer `qr_signer_module`) is drawn here instead of in a window of the
+Not while the QR signer is unreleased: `qr_scanner_module` is not a dependency then, so no claim
+is held and a QR wallet's request shows in the scanner's own window. With the dependency back, a
+QR wallet's request (signer `qr_signer_module`) is drawn here instead of in a window of the
 scanner's:
 - While it is on screen, the backend holds `qr_scanner_module`'s presenter claim. That module is an
   optional dependency, and the core naming this app as the caller is what lets it draw sessions.

@@ -87,7 +87,6 @@ Item {
         property string renderedHandle: ""
         property string renderedBundleId: ""
         property string renderedRequester: ""
-        property string renderedRequesterName: ""
         property string renderedSigner: ""
         property string renderedCollects: ""
         property string renderedSignersJson: "[]"
@@ -109,7 +108,6 @@ Item {
         function acknowledge(handle) {
             fake.renderedHandle = handle
             fake.renderedRequester = "eth_wallet_backend"
-            fake.renderedRequesterName = ""
             fake.renderedBundleId = "9f86d081"
             fake.claimLines = [probe.claim]
             fake.renderLines = ["Account: 0xf39F…2266", probe.signedLine,
@@ -122,7 +120,6 @@ Item {
         function acknowledgeBare(handle) {
             fake.renderedHandle = handle
             fake.renderedRequester = "eth_wallet_backend"
-            fake.renderedRequesterName = ""
             fake.renderedBundleId = "9f86d081"
             fake.claimLines = []
             fake.renderLines = ["Account: 0xf39F…2266", probe.signedLine]
@@ -130,11 +127,10 @@ Item {
             return true
         }
 
-        // A Bitcoin send from a wallet's core module, which its installed package names.
+        // A Bitcoin send from a wallet's core module.
         function acknowledgeBitcoin(handle) {
             fake.renderedHandle = handle
             fake.renderedRequester = "bitcoin_wallet_core_module"
-            fake.renderedRequesterName = "Bitcoin Wallet Core"
             fake.renderedBundleId = "5be1c0de"
             fake.claimLines = []
             fake.renderLines = ["Wallet: \"Savings\"", "Commitment: 5be1c0de", "1 item(s) to sign:",
@@ -210,16 +206,14 @@ Item {
               false)
     }
 
-    function assertSectionOneNamesWhoAskedAsTheUserInstalledIt() {
+    function assertSectionOneNamesWhoAskedByItsId() {
         console.log("")
-        console.log("section 1 names a module as its installed package does, and always by its id too.")
-        console.log("A name is the backend's to give: one the requester chose could say anything")
+        console.log("section 1 names who asked by the module id the manager gave, never by a chosen name")
         fake.acknowledgeBitcoin("apr_ccc333")
-        check("a named module reads as its name, then its id", probe.headingOf("sectionRequester"),
-              "1.  Requested by: Bitcoin Wallet Core (bitcoin_wallet_core_module)")
+        check("a module reads as its id", probe.headingOf("sectionRequester"),
+              "1.  Requested by: bitcoin_wallet_core_module")
         fake.acknowledgeBare("apr_bbb222")
-        check("a module nothing installed names reads as its id alone",
-              probe.headingOf("sectionRequester"), "1.  Requested by: eth_wallet_backend")
+        check("so does another", probe.headingOf("sectionRequester"), "1.  Requested by: eth_wallet_backend")
     }
 
     function assertABitcoinSendIsReadNotLeftUndecoded() {
@@ -252,7 +246,7 @@ Item {
             probe.assertEachSectionCarriesItsOwnLines()
             probe.assertTheRequestersWordsStayOutOfWhatIsSigned()
             probe.assertAnEmptySectionSaysSoRatherThanVanishing()
-            probe.assertSectionOneNamesWhoAskedAsTheUserInstalledIt()
+            probe.assertSectionOneNamesWhoAskedByItsId()
             probe.assertABitcoinSendIsReadNotLeftUndecoded()
 
             console.log("")

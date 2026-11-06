@@ -1,7 +1,7 @@
 {
   "name": "evm_signer_ui",
   "display_name": "Signer",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "ui_qml",
   "interface": "universal",
   "category": "wallet",
@@ -18,11 +18,6 @@
   "optional_dependencies": [
     {
       "name": "token_list_module",
-      "version": "~0.2.0"
-    },
-    "package_manager",
-    {
-      "name": "qr_scanner_module",
       "version": "~0.2.0"
     }
   ],

@@ -79,8 +79,6 @@ private:
     /// What a token list calls this leg's address, or nothing. Empty whenever the
     /// module is absent, which is the ordinary case on a signing device.
     QStringList tokenListLines(const QJsonObject &leg) const;
-    /// Name the request on screen as the user's installed package does, once package_manager answers.
-    void nameRequester(const QString &handle, const QString &module);
     void startDwell();
     /// Refresh on a clean event-loop stack. Use this from event callbacks:
     /// calling out synchronously from an IPC callback deadlocks the reply.
@@ -109,7 +107,6 @@ private:
     /// Names the codes in `qrFramesJson`, which the scanner then doesn't send again.
     QString m_qrFramesId;
     QTimer m_qrPoll;
-    bool m_qrInFlight = false;
     /// Follows a wallet's device step.
     QTimer m_unlockPoll;
     /// The Wallets view's backstop.

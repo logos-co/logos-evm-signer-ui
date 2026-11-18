@@ -330,12 +330,38 @@ Item {
 
         RowLayout {
             Layout.fillWidth: true
-            LogosText {
-                text: root.ready ? backend.statusText : "Connecting…"
-                textFormat: Text.PlainText
-                font.bold: true
+            ColumnLayout {
+                spacing: 0
+                RowLayout {
+                    spacing: Theme.spacing.tiny
+                    LogosText {
+                        text: "Signer"
+                        color: Theme.palette.text
+                        font.pixelSize: 28
+                        font.weight: Theme.typography.weightBold
+                    }
+                    LogosInfoButton {
+                        objectName: "signerInfo"
+                        title: "What the Signer does"
+                        Accessible.name: "Help: what the Signer does"
+                        text: "The Signer keeps your wallets' unlock keys, passwords and rules, and it is the only screen that shows what you are about to sign and takes your vault password. Wallets appear here once a device or key app (Keycard, Keys, a QR wallet) enrolls them; each unlocks by its own rule. Names and rules you set here are saved on this computer."
+                    }
+                }
+                LogosText {
+                    text: "Signing requests and wallets"
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: Theme.typography.secondaryText
+                }
             }
             Item { Layout.fillWidth: true }
+            LogosText {
+                Layout.alignment: Qt.AlignVCenter
+                visible: text.length > 0
+                text: root.ready ? backend.statusText : "Connecting…"
+                textFormat: Text.PlainText
+                color: Theme.palette.textSecondary
+                font.pixelSize: Theme.typography.secondaryText
+            }
             LogosButton {
                 text: "Refresh"
                 enabled: root.ready

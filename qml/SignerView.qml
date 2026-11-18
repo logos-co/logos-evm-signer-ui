@@ -386,6 +386,7 @@ Item {
             onCurrentIndexChanged: root.page = currentIndex
             LogosTabButton { text: root.queue.length > 0 ? "Requests (" + root.queue.length + ")" : "Requests" }
             LogosTabButton { text: "Wallets" }
+            LogosTabButton { text: "Passwords" }
         }
 
         StackLayout {
@@ -773,6 +774,12 @@ Item {
                 onUnlock: function (seed, openHandle) { root.openUnlock(seed, openHandle) }
                 onRule: function (seed) { root.openRule(seed, "rule") }
                 onKeys: function (seed) { root.openRule(seed, "keys") }
+            }
+
+            PasswordsView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                backend: root.ready ? root.backend : null
             }
         }
     }

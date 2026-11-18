@@ -172,15 +172,21 @@ function familyWord(e) {
     return isBitcoin(e) ? "Bitcoin" : "Ethereum"
 }
 
-// The name the person gave it, else what it is.
+// The name the person gave it, else an auto name that distinguishes accounts of one wallet:
+// the family plus the account/address index, e.g. "Ethereum 0", "Ethereum 1". The wallet id is
+// already the card's title, so it is not repeated per account.
 function rowTitle(e) {
-    return text(e && e.label) || familyWord(e)
+    var given = text(e && e.label)
+    if (given) return given
+    var n = accountNumber(e)
+    return n >= 0 ? familyWord(e) + " " + n : familyWord(e)
 }
 
-// "account 0": a Bitcoin account's number, or an EVM address's index.
+// Was "account 0" (the EVM address index or Bitcoin account number). Dropped: for EVM it just
+// repeated the last step of the derivation path shown below, and the index now sits in the auto
+// name. Kept as a function returning nothing so callers need no change.
 function rowId(e) {
-    var n = accountNumber(e)
-    return n >= 0 ? "account " + n : ""
+    return ""
 }
 
 function badges(e) {

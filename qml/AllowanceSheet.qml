@@ -104,7 +104,7 @@ Rectangle {
 
     function pickAccount(a) {
         account = keystoreId(a)
-        if (String(a.family).indexOf("bitcoin") !== 0) scopeKind = "all"
+        scopeKind = String(a.family).indexOf("bitcoin") === 0 ? "spend" : "all"
         if (scopeKind === "all") review = true
     }
     function digits(t) { return /^[0-9]*$/.test(t.trim()) }
@@ -233,6 +233,8 @@ Rectangle {
                     objectName: "allowanceAccountChoice"
                     required property var modelData
                     Layout.fillWidth: true
+                    // Radio buttons sharing a parent otherwise uncheck each other, across questions.
+                    autoExclusive: false
                     checkable: false
                     checked: sheet.keystoreId(modelData).toLowerCase() === sheet.account.toLowerCase()
                     text: sheet.accountLabel(modelData)
@@ -272,6 +274,7 @@ Rectangle {
                 objectName: "allowanceScopeSpend"
                 visible: sheet.editable && sheet.bitcoin
                 Layout.fillWidth: true
+                autoExclusive: false
                 checkable: false
                 checked: sheet.scopeKind === "spend"
                 text: "Spending Bitcoin from this wallet"
@@ -286,6 +289,7 @@ Rectangle {
                     delegate: LogosRadioButton {
                         objectName: "allowanceNetwork_" + modelData
                         required property string modelData
+                        autoExclusive: false
                         checkable: false
                         checked: sheet.pickedNetwork === modelData
                         text: modelData
@@ -297,6 +301,7 @@ Rectangle {
                 objectName: "allowanceScopeAll"
                 visible: sheet.editable
                 Layout.fillWidth: true
+                autoExclusive: false
                 checkable: false
                 checked: sheet.scopeKind === "all"
                 text: "Every kind of request, each shown to you"
@@ -309,6 +314,7 @@ Rectangle {
                 objectName: "allowanceReviewOff"
                 visible: sheet.scopeKind === "spend" && !(sheet.asked && sheet.asked.review)
                 Layout.fillWidth: true
+                autoExclusive: false
                 checkable: false
                 checked: !sheet.review
                 text: "Without showing me each signature"
@@ -317,6 +323,7 @@ Rectangle {
             LogosRadioButton {
                 objectName: "allowanceReviewOn"
                 Layout.fillWidth: true
+                autoExclusive: false
                 checkable: false
                 checked: sheet.review
                 text: "Show me each signature to confirm, with no password"

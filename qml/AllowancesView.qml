@@ -24,15 +24,20 @@ ColumnLayout {
     readonly property var roster: parse(backend ? backend.rosterJson : "[]", [])
     readonly property var history: parse(backend ? backend.unattendedJson : "[]", [])
 
-    function accountName(id) {
+    // The roster lists only unlocked wallets.
+    function rosterEntry(id) {
         var want = String(id).toLowerCase()
         for (var i = 0; i < roster.length; i++) {
             var holders = roster[i].holders || []
             for (var j = 0; j < holders.length; j++)
                 if (String(holders[j].accountId).toLowerCase() === want)
-                    return roster[i].label || roster[i].address || id
+                    return roster[i]
         }
-        return id
+        return null
+    }
+    function accountName(id) {
+        var entry = rosterEntry(id)
+        return entry ? entry.label || entry.address || id : "Locked wallet"
     }
     function callersText(a) {
         return (a.callers || []).map(function (c) {
@@ -160,6 +165,7 @@ ColumnLayout {
                     objectName: "allowanceCard"
                     required property var modelData
                     readonly property var a: modelData
+                    readonly property bool unlocked: view.rosterEntry(a.account) !== null
                     property bool resuming: false
                     Layout.fillWidth: true
                     implicitHeight: cardBody.implicitHeight + 20
@@ -220,9 +226,17 @@ ColumnLayout {
                             textFormat: Text.PlainText
                             color: Theme.palette.textSecondary
                         }
+                        LogosText {
+                            objectName: "allowanceUnlockFirst"
+                            visible: card.a.state === "waiting" && !card.unlocked
+                            Layout.fillWidth: true
+                            text: "Unlock this wallet in Wallets to start this allowance again."
+                            textFormat: Text.PlainText
+                            wrapMode: Text.Wrap
+                        }
 
                         RowLayout {
-                            visible: card.resuming
+                            visible: card.resuming && card.unlocked
                             Layout.fillWidth: true
                             spacing: 8
                             LogosTextField {
@@ -250,14 +264,14 @@ ColumnLayout {
                             spacing: 8
                             LogosButton {
                                 objectName: "allowanceResume"
-                                visible: card.a.state === "waiting" && !card.resuming
+                                visible: card.a.state === "waiting" && !card.resuming && card.unlocked
                                 text: "Start again…"
                                 onClicked: card.resuming = true
                             }
                             Item { Layout.fillWidth: true }
                             LogosButton {
                                 objectName: "allowanceChange"
-                                visible: card.a.state !== "ended"
+                                visible: card.a.state !== "ended" && card.unlocked
                                 text: "Change…"
                                 onClicked: view.change(card.a)
                             }

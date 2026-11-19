@@ -5,6 +5,7 @@
 #include <QDateTime>
 #include <QJsonObject>
 #include <QPointer>
+#include <QRegularExpression>
 #include <QScopeGuard>
 
 #include "logos_sdk.h"
@@ -699,6 +700,17 @@ QString walletErrorText(const QJsonObject &r, const QString &fallback)
     return why.isEmpty() ? fallback : why;
 }
 
+/// The same words without the code they lead with, such as `WrongSecret: `.
+QString allowanceErrorText(const QJsonObject &r, const QString &fallback)
+{
+    static const QRegularExpression code(QStringLiteral("^[A-Za-z]+: "));
+    QString why = walletErrorText(r, fallback).remove(code);
+    if (!why.isEmpty()) {
+        why[0] = why[0].toUpper();
+    }
+    return why;
+}
+
 } // namespace
 
 bool EvmSignerUiBackend::walletReply(const QString &reply, const QString &fallback)
@@ -767,7 +779,7 @@ bool EvmSignerUiBackend::allowanceReply(const QString &reply, const QString &fal
 {
     const QJsonObject r = parseObject(reply);
     if (!r.value(QStringLiteral("ok")).toBool()) {
-        setAllowanceError(walletErrorText(r, fallback));
+        setAllowanceError(allowanceErrorText(r, fallback));
         return false;
     }
     setAllowanceError(QString());
@@ -811,7 +823,7 @@ bool EvmSignerUiBackend::showAllowanceRequest(QString handle)
 {
     QJsonObject r = parseObject(modules().signer_manager_module.acknowledge_access(handle));
     if (!r.value(QStringLiteral("ok")).toBool()) {
-        setAllowanceError(walletErrorText(r, QStringLiteral("That request is no longer waiting.")));
+        setAllowanceError(allowanceErrorText(r, QStringLiteral("That request is no longer waiting.")));
         return false;
     }
     r.remove(QStringLiteral("ok"));

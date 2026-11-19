@@ -8,7 +8,7 @@
     # authored, and section 3 is decoded from those very lines by a linked-in
     # library.
     signer_manager_module = {
-      url = "github:logos-co/logos-signer-manager-module/471fb75e7f4fab96e798c5945998af1f68f2863d";
+      url = "github:logos-co/logos-signer-manager-module/b71f9dec8cc01efc41e58b9f58ed327883b48cd0";
       # Without the follows it drags its own module-builder, and a skewed generated
       # ABI segfaults the module inside provider init.
       inputs.logos-module-builder.follows = "logos-module-builder";

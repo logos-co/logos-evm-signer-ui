@@ -700,10 +700,10 @@ QString walletErrorText(const QJsonObject &r, const QString &fallback)
     return why.isEmpty() ? fallback : why;
 }
 
-/// The same words without the code they lead with, such as `WrongSecret: `.
+/// The same words without the codes they lead with, such as `WrongSecret: ` or `invalid parameters: allowance: `.
 QString allowanceErrorText(const QJsonObject &r, const QString &fallback)
 {
-    static const QRegularExpression code(QStringLiteral("^[A-Za-z]+: "));
+    static const QRegularExpression code(QStringLiteral("^(?:(?:[A-Za-z]+|[Ii]nvalid parameters): )+"));
     QString why = walletErrorText(r, fallback).remove(code);
     if (!why.isEmpty()) {
         why[0] = why[0].toUpper();

@@ -9,9 +9,10 @@
 //!   4. poll approval_status until it settles (Tier B, receipt-gated)
 //!   5. fetch_result, print the signature     (Tier B, receipt-gated)
 //!
-//! Then two Bitcoin sends (`bitcoin_rounds`), a signature under an allowance the person granted
-//! (`reviewed_round`), one from a device (`device_round`), and one from that device's account once
-//! the keystore holds it too, with the person choosing the device (`chosen_round`).
+//! Then two Bitcoin sends (`bitcoin_rounds`), a signature under an allowance the person reviews
+//! (`reviewed_round`), one under an allowance nobody reviews (`unattended_round`), one from a device
+//! (`device_round`), and one from that device's account once the keystore holds it too, with the
+//! person choosing the device (`chosen_round`).
 //!
 //! Nothing here can reach `approve()`. The signature this prints exists only
 //! because a human typed the vault password into the signer UI.
@@ -113,9 +114,9 @@ fn ask_and_collect(intent: &Value, marker: &str) -> Result<Value, String> {
     Err(format!("nobody decided {marker}"))
 }
 
-/// Asks for an allowance for one signature, shown to the person, and waits until the Signer grants it.
-fn ask_for_allowance(account: &str, scope: Value) -> Result<(), String> {
-    let ask = json!({ "account": account, "scope": scope, "review": true, "limits": { "count": 1 } });
+/// Asks for an allowance for one signature and waits until the Signer grants it.
+fn ask_for_allowance(account: &str, scope: Value, review: bool) -> Result<(), String> {
+    let ask = json!({ "account": account, "scope": scope, "review": review, "limits": { "count": 1 } });
     ok_value(modules().signer_manager_module.request_allowance(&ask.to_string()))?;
     for _ in 0..600 {
         std::thread::sleep(Duration::from_millis(250));
@@ -134,11 +135,20 @@ fn ask_for_allowance(account: &str, scope: Value) -> Result<(), String> {
 fn reviewed_round(address: &str) -> Result<String, String> {
     // After the doc-test has seen the queue empty: a request arriving at once replaces that line.
     std::thread::sleep(Duration::from_secs(8));
-    ask_for_allowance(address, json!({ "kind": "all" }))?;
+    ask_for_allowance(address, json!({ "kind": "messages" }), true)?;
     // No form of the word the doc-test clicks by text, as in the first round.
     let intent = json!({ "address": address, "purpose": "Doc-test: sign again, reviewed",
                          "legs": [{ "kind": "message", "text": "Reviewed, one signature" }] });
     let signed = ask_and_collect(&intent, "REQUESTED_REVIEWED")?;
+    Ok(signed.get(0).and_then(Value::as_str).unwrap_or("").to_string())
+}
+
+/// Signs once under an allowance granted without review, for messages with one prefix: nobody is asked.
+fn unattended_round(address: &str) -> Result<String, String> {
+    ask_for_allowance(address, json!({ "kind": "messages", "prefix": "Doc-test:" }), false)?;
+    let intent = json!({ "address": address, "purpose": "Doc-test: sign unattended",
+                         "legs": [{ "kind": "message", "text": "Doc-test: unattended, one signature" }] });
+    let signed = ask_and_collect(&intent, "REQUESTED_UNATTENDED")?;
     Ok(signed.get(0).and_then(Value::as_str).unwrap_or("").to_string())
 }
 
@@ -216,7 +226,7 @@ fn bitcoin_rounds() -> Result<(), String> {
     };
     println!("{MARK}_PSBT_SIGNED: {}", send("Doc-test: a regtest send", "REQUESTED_PSBT")?);
     std::thread::sleep(Duration::from_secs(8));
-    ask_for_allowance(&group, json!({ "kind": "spend", "network": "regtest" }))?;
+    ask_for_allowance(&group, json!({ "kind": "spend", "network": "regtest" }), true)?;
     println!("{MARK}_PSBT_SIGNED_REVIEWED: {}", send("Doc-test: a regtest send, reviewed", "REQUESTED_PSBT_REVIEWED")?);
     Ok(())
 }
@@ -453,6 +463,11 @@ fn drive(state: Shared) {
                 match reviewed_round(&address) {
                     Ok(sig) => println!("{MARK}_SIGNED_REVIEWED: {sig}"),
                     Err(e) => println!("{MARK}_ERROR: reviewed round: {e}"),
+                }
+                std::thread::sleep(Duration::from_secs(3));
+                match unattended_round(&address) {
+                    Ok(sig) => println!("{MARK}_SIGNED_UNATTENDED: {sig}"),
+                    Err(e) => println!("{MARK}_ERROR: unattended round: {e}"),
                 }
                 match device_round() {
                     Ok((device, sig)) => {

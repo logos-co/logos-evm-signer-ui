@@ -21,9 +21,11 @@ intro: |
   5. The password is typed into the UI and Approve is clicked; the manager has the
      keystore sign and checks the signatures.
   6. The requester collects a real secp256k1 signature with its receipt.
-  7. `signer_probe` asks for an allowance with each signature shown. The person grants it on
-     the Allowances page with the password. The probe asks again: the signer says no password
+  7. `signer_probe` asks for an allowance to sign messages, each one shown. The person grants it
+     on the Allowances page with the password. The probe asks again: the signer says no password
      is needed, shows no password field, and the approval needs nothing typed.
+  8. `signer_probe` asks for an allowance for messages that start with `Doc-test:`, not shown.
+     Once the person grants it, the next such message is signed as it arrives.
 
   Every refusal on the way is asserted too, because they are the design: the
   requester can ask and collect but can never approve, and nothing signs until
@@ -577,6 +579,7 @@ sections:
               action: wait_for
               texts:
                 - "signer_probe asks for an allowance"
+                - "Sign any message"
                 - "Each signature is shown to you, with no password"
                 - "At most 1 signature"
               timeout: 5000
@@ -622,6 +625,48 @@ sections:
               texts: ["Approved — 1 item signed"]
               timeout: 20000
               screenshot: "evm-signer-ui-reviewed.png"
+
+            - name: "Unattended: the app asks for messages with one prefix, not shown to you"
+              action: wait_for
+              texts: ["Allowances (1)"]
+              timeout: 30000
+
+            - name: "Unattended: open the Allowances page"
+              action: click
+              target: "Allowances (1)"
+
+            - name: "Unattended: open what it asks for"
+              action: click_object
+              find_value: "allowanceRequestReview"
+
+            - name: "Unattended: the manager's words for it"
+              action: wait_for
+              texts:
+                - "signer_probe asks for an allowance"
+                - "Sign messages that start with “Doc-test:”"
+                - "Signed WITHOUT showing you each one"
+                - "At most 1 signature"
+              timeout: 5000
+
+            - name: "Unattended: the wallet's password grants it"
+              action: set_text
+              find_by: "objectName"
+              find_value: "allowancePassword"
+              value: "doctest-pw"
+
+            - name: "Unattended: allow it"
+              action: click_object
+              find_value: "allowanceGrant"
+
+            - name: "Signed as it arrived, with nobody asked"
+              action: wait_for
+              texts: ["signer_probe · Signed without asking"]
+              timeout: 20000
+              screenshot: "evm-signer-ui-unattended.png"
+
+            - name: "Back to the requests"
+              action: click_object
+              find_value: "requestsTab"
 
             - name: "A device's request: the device asks the person itself"
               # The probe asks for a signature from the mock device's account; nothing is typed here.
@@ -742,6 +787,15 @@ sections:
         expect_contains:
           - "SIGNER_PROBE_PSBT_SIGNED: 1"
           - "SIGNER_PROBE_PSBT_SIGNED_REVIEWED: 1"
+
+      - title: "What the probe collected under its message allowances"
+        text: |
+          One message the person confirmed with no password, and one signed as it arrived, under an
+          allowance for messages that start with `Doc-test:`.
+        run: "grep -hE 'SIGNER_PROBE_SIGNED_(REVIEWED|UNATTENDED)' ui-test-app.log"
+        expect_contains:
+          - "SIGNER_PROBE_SIGNED_REVIEWED: 0x"
+          - "SIGNER_PROBE_SIGNED_UNATTENDED: 0x"
 
       - title: "What the probe collected from the device"
         text: |

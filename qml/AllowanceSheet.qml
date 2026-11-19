@@ -81,6 +81,15 @@ Rectangle {
         keptHours = hoursFrom(keptExpiry)
         hours.text = keptHours
         endsAtRestart.checked = g.endsAtRestart === true
+        var s = g.scope
+        prefix.text = s.prefix || ""
+        typedContract.text = s.kind === "typed_data" && s.contract ? s.contract : ""
+        typedName.text = s.name || ""
+        typedChain.text = s.kind === "typed_data" && s.chainId ? String(s.chainId) : ""
+        typedType.text = s.primaryType || ""
+        callsChain.text = s.kind === "calls" ? String(s.chainId) : "1"
+        callsContracts.text = (s.contracts || []).join(", ")
+        callsMethods.text = (s.methods || []).join(", ")
         password.text = ""
     }
     function reset() {
@@ -92,9 +101,38 @@ Rectangle {
         } else {
             var spendable = accounts.length > 0 && String(accounts[0].family).indexOf("bitcoin") === 0
             fill({ account: accounts.length > 0 ? keystoreId(accounts[0]) : "", callers: [], review: !spendable,
-                   scope: { kind: spendable ? "spend" : "all" } })
+                   scope: { kind: spendable ? "spend" : "messages" } })
         }
     }
+    function list(t) { return t.split(",").map(function (s) { return s.trim() }).filter(function (s) { return s !== "" }) }
+    function scopeJson() {
+        if (mode === "change") return existing.scope
+        if (scopeKind === "spend") return { kind: "spend", network: pickedNetwork }
+        if (scopeKind === "messages") return prefix.text.trim() === "" ? { kind: "messages" } : { kind: "messages", prefix: prefix.text }
+        if (scopeKind === "typed_data") {
+            var t = { kind: "typed_data" }
+            if (typedContract.text.trim() !== "") t.contract = typedContract.text.trim()
+            if (typedName.text.trim() !== "") t.name = typedName.text.trim()
+            if (typedChain.text.trim() !== "") t.chainId = Number(typedChain.text)
+            if (typedType.text.trim() !== "") t.primaryType = typedType.text.trim()
+            return t
+        }
+        if (scopeKind === "calls") {
+            var c = { kind: "calls", chainId: Number(callsChain.text) }
+            if (list(callsContracts.text).length > 0) c.contracts = list(callsContracts.text)
+            if (list(callsMethods.text).length > 0) c.methods = list(callsMethods.text)
+            return c
+        }
+        return { kind: "all" }
+    }
+    // What "any" leaves open, said before it is granted.
+    readonly property string anyRisk: scopeKind === "messages" && prefix.text.trim() === ""
+        ? "Any message: the app could sign in as you, or agree to anything put as text."
+        : scopeKind === "typed_data" && [typedContract, typedName, typedChain, typedType].every(function (f) { return f.text.trim() === "" })
+        ? "Any typed data: the app could sign an off-chain order. Permits still come to you."
+        : scopeKind === "calls" && callsContracts.text.trim() === ""
+        ? "Any contract: one that already holds a token approval of yours could move those tokens."
+        : ""
     // The request ended while on screen: nothing is left to answer.
     onAskedChanged: {
         if (mode !== "request") return
@@ -104,13 +142,16 @@ Rectangle {
 
     function pickAccount(a) {
         account = keystoreId(a)
-        scopeKind = String(a.family).indexOf("bitcoin") === 0 ? "spend" : "all"
-        if (scopeKind === "all") review = true
+        var spendable = String(a.family).indexOf("bitcoin") === 0
+        scopeKind = spendable ? "spend" : "messages"
+        review = !spendable
+        anyApp = anyApp && review
     }
     function digits(t) { return /^[0-9]*$/.test(t.trim()) }
     readonly property bool formOk: account !== "" && password.text.length > 0
                                    && (anyApp || moduleField.text.trim() !== "")
-                                   && [count, hours].every(function (f) { return sheet.digits(f.text) })
+                                   && [count, hours, typedChain].every(function (f) { return sheet.digits(f.text) })
+                                   && (scopeKind !== "calls" || (callsChain.text.trim() !== "" && digits(callsChain.text) && digits(maxFee.text)))
                                    && (!spends || ([perRequest, total, periodAmount, maxFee].every(function (f) { return sheet.digits(f.text) })
                                                    && (periodAmount.text.trim() === "") === (periodHours.text.trim() === "")
                                                    && /^[0-9.]*$/.test(periodHours.text.trim())))
@@ -129,6 +170,7 @@ Rectangle {
             var places = destinations.text.split(",").map(function (d) { return d.trim() }).filter(function (d) { return d !== "" })
             if (places.length > 0) l.destinations = places
         }
+        if (scopeKind === "calls") put("maxFee", maxFee)
         if (count.text.trim() !== "") l.count = Number(count.text)
         if (hours.text.trim() !== "")
             l.expiresAtMs = keptExpiry > 0 && hours.text.trim() === keptHours ? keptExpiry : Date.now() + Number(hours.text) * 3600000
@@ -143,8 +185,7 @@ Rectangle {
             var caller = { module: anyApp ? "*" : moduleField.text.trim() }
             if (!anyApp && forField.text.trim() !== "") caller["for"] = forField.text.trim()
             var g = { account: account, callers: mode === "change" ? existing.callers : [caller], limits: limits(), review: review,
-                      scope: scopeKind === "spend" ? { kind: "spend", network: mode === "change" ? existing.scope.network : pickedNetwork } : { kind: "all" },
-                      endsAtRestart: endsAtRestart.checked }
+                      scope: scopeJson(), endsAtRestart: endsAtRestart.checked }
             if (mode === "change") g.replaces = { id: existing.id, version: existing.version }
             logos.watch(backend.grantAllowance(JSON.stringify(g), password.text), done)
         }
@@ -298,6 +339,69 @@ Rectangle {
                 }
             }
             LogosRadioButton {
+                objectName: "allowanceScopeMessages"
+                visible: sheet.editable && sheet.entry !== null && !sheet.bitcoin
+                Layout.fillWidth: true
+                autoExclusive: false
+                checkable: false
+                checked: sheet.scopeKind === "messages"
+                text: "Signing messages"
+                onClicked: sheet.scopeKind = "messages"
+            }
+            LogosTextField {
+                id: prefix
+                objectName: "allowanceMessagePrefix"
+                visible: sheet.editable && sheet.scopeKind === "messages"
+                Layout.fillWidth: true
+                Layout.leftMargin: 24
+                placeholderText: "Only messages that start with… (optional)"
+            }
+            LogosRadioButton {
+                objectName: "allowanceScopeTypedData"
+                visible: sheet.editable && sheet.entry !== null && !sheet.bitcoin
+                Layout.fillWidth: true
+                autoExclusive: false
+                checkable: false
+                checked: sheet.scopeKind === "typed_data"
+                text: "Signing typed data, never a token permit"
+                onClicked: sheet.scopeKind = "typed_data"
+            }
+            ColumnLayout {
+                visible: sheet.editable && sheet.scopeKind === "typed_data"
+                Layout.fillWidth: true
+                Layout.leftMargin: 24
+                spacing: 4
+                Hint { text: "Each one left empty matches any." }
+                LogosTextField { id: typedName; objectName: "allowanceTypedName"; Layout.fillWidth: true; placeholderText: "App name in the request" }
+                LogosTextField { id: typedContract; objectName: "allowanceTypedContract"; Layout.fillWidth: true; placeholderText: "Contract address" }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    LogosTextField { id: typedChain; objectName: "allowanceTypedChain"; Layout.fillWidth: true; Layout.preferredWidth: 1; placeholderText: "Chain ID" }
+                    LogosTextField { id: typedType; objectName: "allowanceTypedType"; Layout.fillWidth: true; Layout.preferredWidth: 2; placeholderText: "Type, such as Order" }
+                }
+            }
+            LogosRadioButton {
+                objectName: "allowanceScopeCalls"
+                visible: sheet.editable && sheet.entry !== null && !sheet.bitcoin
+                Layout.fillWidth: true
+                autoExclusive: false
+                checkable: false
+                checked: sheet.scopeKind === "calls"
+                text: "Calling contracts, never a token transfer or approval"
+                onClicked: sheet.scopeKind = "calls"
+            }
+            ColumnLayout {
+                visible: sheet.editable && sheet.scopeKind === "calls"
+                Layout.fillWidth: true
+                Layout.leftMargin: 24
+                spacing: 4
+                Limit { id: callsChain; name: "allowanceCallsChain"; label: "Chain ID"; placeholder: "1" }
+                Limit { id: callsContracts; name: "allowanceCallsContracts"; label: "Contracts, separated by commas"; placeholder: "Any contract" }
+                Limit { id: callsMethods; name: "allowanceCallsMethods"; label: "Methods, such as stake(uint256)"; placeholder: "Any method" }
+                Hint { text: "Calls that send ETH, and deployments, still come to you." }
+            }
+            LogosRadioButton {
                 objectName: "allowanceScopeAll"
                 visible: sheet.editable
                 Layout.fillWidth: true
@@ -312,7 +416,7 @@ Rectangle {
             Heading { text: "How it signs" }
             LogosRadioButton {
                 objectName: "allowanceReviewOff"
-                visible: sheet.scopeKind === "spend" && !(sheet.asked && sheet.asked.review)
+                visible: sheet.scopeKind !== "all" && !(sheet.asked && sheet.asked.review)
                 Layout.fillWidth: true
                 autoExclusive: false
                 checkable: false
@@ -356,8 +460,8 @@ Rectangle {
             Limit {
                 id: maxFee
                 name: "allowanceMaxFee"
-                visible: sheet.spends
-                label: "Fee of each signature, in sats"
+                visible: sheet.spends || sheet.scopeKind === "calls"
+                label: sheet.scopeKind === "calls" ? "Fee of each transaction, in wei" : "Fee of each signature, in sats"
                 placeholder: "No limit"
             }
             Limit {
@@ -384,6 +488,15 @@ Rectangle {
                 visible: sheet.unlimited && sheet.spends
                 Layout.fillWidth: true
                 text: "Nothing limits this: the app could spend everything in this wallet without asking you."
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                color: Theme.palette.error
+            }
+            LogosText {
+                objectName: "allowanceAnyScopeWarning"
+                visible: sheet.anyRisk !== ""
+                Layout.fillWidth: true
+                text: sheet.anyRisk
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
                 color: Theme.palette.error

@@ -9,9 +9,9 @@
 //!   4. poll approval_status until it settles (Tier B, receipt-gated)
 //!   5. fetch_result, print the signature     (Tier B, receipt-gated)
 //!
-//! Then the same again inside an unlock, two Bitcoin sends (`bitcoin_rounds`), a signature
-//! from a device (`device_round`), and one from that device's account once the keystore holds it
-//! too, with the person choosing the device (`chosen_round`).
+//! Then two Bitcoin sends (`bitcoin_rounds`), a signature under an allowance the person granted
+//! (`reviewed_round`), one from a device (`device_round`), and one from that device's account once
+//! the keystore holds it too, with the person choosing the device (`chosen_round`).
 //!
 //! Nothing here can reach `approve()`. The signature this prints exists only
 //! because a human typed the vault password into the signer UI.
@@ -46,10 +46,9 @@ const BTC_PASSWORD: &str = "btc-pw";
 /// admits nobody, so the key import below would be refused. Only the manager may ask
 /// the keystore to sign.
 const KEYSTORE_ROLES: &str = r#"{"custodians":"signer_probe","managers":"signer_manager_module"}"#;
-/// The manager's: the approver stays `evm_signer_ui`, the surface under test. This fixture is also
-/// its custodian, playing the keys app for the unlock in the second round. Its signers are the
+/// The manager's: the approver stays `evm_signer_ui`, the surface under test. Its signers are the
 /// keystore and a mock device.
-const MANAGER_ROLES: &str = r#"{"approvers":"evm_signer_ui","custodians":["evm_keystore_ui","signer_probe"],"signers":["keystore_module","mock_device_signer"]}"#;
+const MANAGER_ROLES: &str = r#"{"approvers":"evm_signer_ui","custodians":"evm_keystore_ui","signers":["keystore_module","mock_device_signer"]}"#;
 
 /// Printed on stdout so the doc-test can assert on the app log without needing
 /// a CLI — Basecamp has none.
@@ -114,18 +113,32 @@ fn ask_and_collect(intent: &Value, marker: &str) -> Result<Value, String> {
     Err(format!("nobody decided {marker}"))
 }
 
-/// The second round: the account unlocked for this module, each signature confirmed, so the
-/// signer approves with no password. Signs once and collects the signature.
-fn unlocked_round(address: &str) -> Result<String, String> {
+/// Asks for an allowance for one signature, shown to the person, and waits until the Signer grants it.
+fn ask_for_allowance(account: &str, scope: Value) -> Result<(), String> {
+    let ask = json!({ "account": account, "scope": scope, "review": true, "limits": { "count": 1 } });
+    ok_value(modules().signer_manager_module.request_allowance(&ask.to_string()))?;
+    for _ in 0..600 {
+        std::thread::sleep(Duration::from_millis(250));
+        let v = ok_value(modules().signer_manager_module.allowances())?;
+        let granted = v["allowances"].as_array().is_some_and(|list| {
+            list.iter().any(|a| a["state"] == "active" && a["account"].as_str().is_some_and(|x| x.eq_ignore_ascii_case(account)))
+        });
+        if granted {
+            return Ok(());
+        }
+    }
+    Err("nobody granted the allowance".into())
+}
+
+/// Signs once under an allowance: the person confirms it in the Signer with no password.
+fn reviewed_round(address: &str) -> Result<String, String> {
     // After the doc-test has seen the queue empty: a request arriving at once replaces that line.
     std::thread::sleep(Duration::from_secs(8));
-    let terms = json!({ "account": address, "password": VAULT_PASSWORD, "count": 1,
-                        "apps": ["signer_probe"], "confirm": true });
-    ok_value(modules().signer_manager_module.unlock(&terms.to_string()))?;
+    ask_for_allowance(address, json!({ "kind": "all" }))?;
     // No form of the word the doc-test clicks by text, as in the first round.
-    let intent = json!({ "address": address, "purpose": "Doc-test: sign again, unlocked",
-                         "legs": [{ "kind": "message", "text": "Unlocked for one signature" }] });
-    let signed = ask_and_collect(&intent, "REQUESTED_UNLOCKED")?;
+    let intent = json!({ "address": address, "purpose": "Doc-test: sign again, reviewed",
+                         "legs": [{ "kind": "message", "text": "Reviewed, one signature" }] });
+    let signed = ask_and_collect(&intent, "REQUESTED_REVIEWED")?;
     Ok(signed.get(0).and_then(Value::as_str).unwrap_or("").to_string())
 }
 
@@ -185,7 +198,7 @@ fn psbt_signatures(item: &Value) -> Option<usize> {
 }
 
 /// The Bitcoin rounds: the test phrase as a regtest wallet, then one send approved with the
-/// wallet's password and one inside a confirmed unlock. Prints each PSBT's signature count.
+/// wallet's password and one under a reviewed allowance. Prints each PSBT's signature count.
 fn bitcoin_rounds() -> Result<(), String> {
     std::thread::sleep(Duration::from_secs(8));
     let p = json!({ "phrase": PHRASE, "family": "bitcoin", "chain": "test", "password": BTC_PASSWORD,
@@ -203,10 +216,8 @@ fn bitcoin_rounds() -> Result<(), String> {
     };
     println!("{MARK}_PSBT_SIGNED: {}", send("Doc-test: a regtest send", "REQUESTED_PSBT")?);
     std::thread::sleep(Duration::from_secs(8));
-    let terms = json!({ "account": group, "password": BTC_PASSWORD, "count": 1,
-                        "apps": ["signer_probe"], "confirm": true });
-    ok_value(modules().signer_manager_module.unlock(&terms.to_string()))?;
-    println!("{MARK}_PSBT_SIGNED_UNLOCKED: {}", send("Doc-test: a regtest send, unlocked", "REQUESTED_PSBT_UNLOCKED")?);
+    ask_for_allowance(&group, json!({ "kind": "spend", "network": "regtest" }))?;
+    println!("{MARK}_PSBT_SIGNED_REVIEWED: {}", send("Doc-test: a regtest send, reviewed", "REQUESTED_PSBT_REVIEWED")?);
     Ok(())
 }
 
@@ -436,12 +447,12 @@ fn drive(state: Shared) {
                 set!(json!({ "ok": true, "state": "signed", "address": address,
                              "handle": handle, "signed": signed }));
                 let _ = modules().signer_manager_module.ack_result(&handle, &receipt);
-                match unlocked_round(&address) {
-                    Ok(sig) => println!("{MARK}_SIGNED_UNLOCKED: {sig}"),
-                    Err(e) => println!("{MARK}_ERROR: unlocked round: {e}"),
-                }
                 if let Err(e) = bitcoin_rounds() {
                     println!("{MARK}_ERROR: Bitcoin rounds: {e}");
+                }
+                match reviewed_round(&address) {
+                    Ok(sig) => println!("{MARK}_SIGNED_REVIEWED: {sig}"),
+                    Err(e) => println!("{MARK}_ERROR: reviewed round: {e}"),
                 }
                 match device_round() {
                     Ok((device, sig)) => {

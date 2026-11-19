@@ -211,12 +211,25 @@ Passwords and PINs cross from this QML to this backend for the same reason the v
 the two are one trust unit, and only the backend talks to the manager. The backend sends them in
 one call and wipes its copies.
 
-## Signing without a password is not offered
+## Allowances
 
-The Signer never unlocks an account for signing, and no longer sends the person to the keys app to
-do it: "unlock" here means a wallet's data, in Wallets. The manager's unlock is still there for a
-custodian to grant (the e2e's probe does); a request it covers shows no password field, and the
-signer line says no password is needed.
+"Unlock" here means a wallet's data, in Wallets. Signing without a password is a separate thing: an
+**allowance**, which the Allowances page grants, changes and removes. Each names an account, the
+apps it is for and what it covers, with limits that are all optional.
+
+- **New allowance** takes the account, the app, what it covers (spending Bitcoin on one network, or
+  every kind of request, each shown to the person), whether each signature is shown, the limits, and
+  the wallet's password. Only accounts in this device's keystore are offered. The sheet warns when
+  nothing limits an app's spending, and when any app may ask.
+- **An app's own request** appears on the page, and on the tab's count. The person reads the
+  manager's lines and may tighten what was asked for, but not loosen it.
+- **A request an allowance covers** shows no password field, and the signer line says none is needed.
+  **One outside it** asks for the password as usual and says why.
+- **After a restart** a kept allowance waits, with what it has spent, until the person starts it again
+  with the password.
+- **Recent signatures** lists what allowances signed and what the person signed past one.
+
+The manager decides all of this: this page shows its lines verbatim and only gathers the choices.
 
 ## What the backend must never do
 

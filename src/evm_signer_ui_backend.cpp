@@ -268,9 +268,15 @@ void EvmSignerUiBackend::onContextReady()
         emit settled(handle, state);
         refreshSoon();
     });
-    // Signed unseen, inside an unlock the person granted that way: re-read the list, off the IPC stack.
+    // Signed unseen, inside an allowance: re-read the list, off the IPC stack.
     modules().signer_manager_module.onSigned_without_asking([this](QString) {
         QTimer::singleShot(0, this, [this] { refreshUnattended(); });
+    });
+    modules().signer_manager_module.onAllowances_changed([this](QString) {
+        QTimer::singleShot(0, this, [this] {
+            refreshAllowances();
+            refreshUnattended();
+        });
     });
     // A device plugged in or out: the request on screen may now be signed by another, off the IPC stack.
     modules().signer_manager_module.onAccounts_changed([this](int) {
@@ -294,6 +300,9 @@ void EvmSignerUiBackend::onContextReady()
         QTimer::singleShot(0, this, [this, handle, state] {
             if (parseObject(openJson()).value(QStringLiteral("handle")).toString() == handle) {
                 setOpenJson(QStringLiteral("{}"));
+            }
+            if (parseObject(allowanceRequestJson()).value(QStringLiteral("handle")).toString() == handle) {
+                setAllowanceRequestJson(QStringLiteral("{}"));
             }
             emit openSettled(handle, state);
             refreshWallets();
@@ -444,6 +453,7 @@ void EvmSignerUiBackend::applySigner(const QJsonObject &r)
     setRenderedSigner(r.value(QStringLiteral("signer")).toString());
     setRenderedCollects(r.value(QStringLiteral("collects")).toString());
     setRenderedUnlocked(r.value(QStringLiteral("unlocked")).toBool());
+    setRenderedOutside(r.value(QStringLiteral("outside")).toString());
     setRenderedSignersJson(QString::fromUtf8(
         QJsonDocument(r.value(QStringLiteral("signers")).toArray()).toJson(QJsonDocument::Compact)));
     setRenderedSignerExplicit(r.value(QStringLiteral("explicit")).toBool());
@@ -724,13 +734,118 @@ void EvmSignerUiBackend::refreshWallets()
     const QJsonObject q = parseObject(modules().signer_manager_module.access_requests());
     if (q.value(QStringLiteral("ok")).toBool()) {
         QJsonArray opens;
+        QJsonArray allowances;
         for (const QJsonValue &v : q.value(QStringLiteral("requests")).toArray()) {
-            if (v.toObject().value(QStringLiteral("kind")).toString() == QStringLiteral("open")) {
+            const QString kind = v.toObject().value(QStringLiteral("kind")).toString();
+            if (kind == QStringLiteral("open")) {
                 opens.append(v);
+            } else if (kind == QStringLiteral("allowance")) {
+                allowances.append(v);
             }
         }
         setOpensJson(compact(opens));
+        setAllowanceRequestsJson(compact(allowances));
     }
+    refreshAllowances();
+}
+
+void EvmSignerUiBackend::refreshAllowances()
+{
+    QJsonObject a = parseObject(modules().signer_manager_module.allowances());
+    if (a.value(QStringLiteral("ok")).toBool()) {
+        a.remove(QStringLiteral("ok"));
+        setAllowancesJson(compact(a));
+    }
+}
+
+void EvmSignerUiBackend::clearAllowanceError()
+{
+    setAllowanceError(QString());
+}
+
+bool EvmSignerUiBackend::allowanceReply(const QString &reply, const QString &fallback)
+{
+    const QJsonObject r = parseObject(reply);
+    if (!r.value(QStringLiteral("ok")).toBool()) {
+        setAllowanceError(walletErrorText(r, fallback));
+        return false;
+    }
+    setAllowanceError(QString());
+    return true;
+}
+
+bool EvmSignerUiBackend::grantAllowance(QString grantJson, QString password)
+{
+    QJsonObject body = QJsonDocument::fromJson(grantJson.toUtf8()).object();
+    body.insert(QStringLiteral("password"), password);
+    QString params = compact(body);
+    password.fill(QChar(0));
+    const bool ok = allowanceReply(modules().signer_manager_module.grant_allowance(params),
+                                   QStringLiteral("Could not save the allowance."));
+    params.fill(QChar(0));
+    refreshAllowances();
+    return ok;
+}
+
+bool EvmSignerUiBackend::revokeAllowance(QString id)
+{
+    const QJsonObject body{ { QStringLiteral("id"), id } };
+    const bool ok = allowanceReply(modules().signer_manager_module.revoke_allowance(compact(body)),
+                                   QStringLiteral("Could not remove the allowance."));
+    refreshAllowances();
+    return ok;
+}
+
+bool EvmSignerUiBackend::resumeAllowances(QString account, QString password)
+{
+    QString params = compact(QJsonObject{ { QStringLiteral("account"), account }, { QStringLiteral("password"), password } });
+    password.fill(QChar(0));
+    const bool ok = allowanceReply(modules().signer_manager_module.resume_allowances(params),
+                                   QStringLiteral("Could not start the allowances again."));
+    params.fill(QChar(0));
+    refreshAllowances();
+    return ok;
+}
+
+bool EvmSignerUiBackend::showAllowanceRequest(QString handle)
+{
+    QJsonObject r = parseObject(modules().signer_manager_module.acknowledge_access(handle));
+    if (!r.value(QStringLiteral("ok")).toBool()) {
+        setAllowanceError(walletErrorText(r, QStringLiteral("That request is no longer waiting.")));
+        return false;
+    }
+    r.remove(QStringLiteral("ok"));
+    setAllowanceError(QString());
+    setAllowanceRequestJson(compact(r));
+    return true;
+}
+
+bool EvmSignerUiBackend::approveAllowanceRequest(QString handle, QString bundleId, QString decidedJson, QString password)
+{
+    QJsonObject body{ { QStringLiteral("handle"), handle }, { QStringLiteral("bundle_id"), bundleId },
+                      { QStringLiteral("password"), password } };
+    const QJsonDocument decided = QJsonDocument::fromJson(decidedJson.toUtf8());
+    if (decided.isObject()) {
+        body.insert(QStringLiteral("allowance"), decided.object());
+    }
+    QString params = compact(body);
+    password.fill(QChar(0));
+    const bool ok = allowanceReply(modules().signer_manager_module.approve_access(params),
+                                   QStringLiteral("Could not grant the allowance."));
+    params.fill(QChar(0));
+    if (ok) {
+        setAllowanceRequestJson(QStringLiteral("{}"));
+    }
+    refreshWallets();
+    return ok;
+}
+
+bool EvmSignerUiBackend::rejectAllowanceRequest(QString handle)
+{
+    const bool ok = modules().signer_manager_module.reject_access(handle);
+    setAllowanceRequestJson(QStringLiteral("{}"));
+    refreshWallets();
+    return ok;
 }
 
 bool EvmSignerUiBackend::qrUnlocking() const

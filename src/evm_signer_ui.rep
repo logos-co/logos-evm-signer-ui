@@ -44,10 +44,12 @@ class EvmSignerUi
     PROP(QString renderedBundleId="" READONLY)
     PROP(QString renderedRequester="" READONLY)
     // Who signs, what it asks for (`password`, `pin`, or `nothing` for a device that asks the
-    // person itself), and whether an unlock covers this request so no secret is needed.
+    // person itself), and whether an allowance covers this request so no secret is needed.
     PROP(QString renderedSigner="" READONLY)
     PROP(QString renderedCollects="" READONLY)
     PROP(bool renderedUnlocked=false READONLY)
+    // Why an allowance that came close doesn't cover the request on screen, in the manager's words.
+    PROP(QString renderedOutside="" READONLY)
     // Every signer holding the account, ranked, verbatim from the manager: `[{ signer, accountId,
     // kind, model, transport, presence, available, collects, showsRequest, canTake, why? }]`. The
     // person may sign with any that can take the request; `renderedSigner` is the one chosen, by
@@ -57,8 +59,8 @@ class EvmSignerUi
     // Approved, and its device is waiting for the person: nothing more to do here until it answers.
     PROP(bool renderedSigning=false READONLY)
 
-    // Requests signed without being shown, inside an unlock the person granted that way:
-    // `[{ handle, requester, account, ageMs }]`.
+    // What allowances signed, and what a person signed past one with the password:
+    // `[{ handle, requester, account, ageMs, spendSat, how, allowance, reason }]`.
     PROP(QString unattendedJson="[]" READONLY)
     // What is actually signed, and the commitment over it.
     PROP(QStringList renderLines READONLY)
@@ -157,6 +159,31 @@ class EvmSignerUi
     SLOT(bool showOpen(QString handle))
     SLOT(bool consentOpen(QString handle, QString bundleId, QString group))
     SLOT(bool rejectOpen(QString handle))
+
+    // ── Allowances: what an app may have signed without the password ────
+    //
+    // Granting one takes the wallet's password, which crosses here as the vault password does above.
+
+    // The manager's `allowances`, verbatim: `{ allowances: [{ id, version, account, callers, scope,
+    // review, endsAtRestart, limits, lines, state, used }], locked, unreadable }`.
+    PROP(QString allowancesJson="{}" READONLY)
+    // Allowances apps are asking for: `[{ handle, requester, kind, state, ageMs }]`.
+    PROP(QString allowanceRequestsJson="[]" READONLY)
+    // The one under review: the manager's `acknowledge_access` reply, verbatim; `{}`.
+    PROP(QString allowanceRequestJson="{}" READONLY)
+    PROP(QString allowanceError="" READONLY)
+
+    SLOT(void refreshAllowances())
+    SLOT(void clearAllowanceError())
+    // `{ account, callers, scope, limits?, review?, endsAtRestart?, replaces? }`.
+    SLOT(bool grantAllowance(QString grantJson, QString password))
+    SLOT(bool revokeAllowance(QString id))
+    // Start an account's allowances again after a restart.
+    SLOT(bool resumeAllowances(QString account, QString password))
+    // Show what an app asks for, answer it as asked or narrower (`{ limits, review, endsAtRestart }`), or refuse it.
+    SLOT(bool showAllowanceRequest(QString handle))
+    SLOT(bool approveAllowanceRequest(QString handle, QString bundleId, QString decidedJson, QString password))
+    SLOT(bool rejectAllowanceRequest(QString handle))
 
     // A device step ended: the wallet is unlocked (or the rule or keys changed), or it isn't.
     SIGNAL(unlockEnded(QString seed, bool ok))

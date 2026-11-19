@@ -21,9 +21,9 @@ intro: |
   5. The password is typed into the UI and Approve is clicked; the manager has the
      keystore sign and checks the signatures.
   6. The requester collects a real secp256k1 signature with its receipt.
-  7. `signer_probe`, playing the keys app, unlocks the account for its own requests, each
-     signature confirmed, and asks again: the signer says the account is unlocked, shows no
-     password field, and the approval needs nothing typed.
+  7. `signer_probe` asks for an allowance with each signature shown. The person grants it on
+     the Allowances page with the password. The probe asks again: the signer says no password
+     is needed, shows no password field, and the approval needs nothing typed.
 
   Every refusal on the way is asserted too, because they are the design: the
   requester can ask and collect but can never approve, and nothing signs until
@@ -80,7 +80,7 @@ sections:
       # flake.lock, so nix wants to write one into a read-only source and fails
       # with "cannot write modified lock file".
       - title: "Build the keystore"
-        run: "nix build 'github:logos-co/logos-evm-keystore-module/e83a899a1718ed52e3173dc85d06b15b9c68f41a#install' --no-write-lock-file -o result-keystore"
+        run: "nix build 'github:logos-co/logos-evm-keystore-module/eb27b23efe84664bcd66b3a8eb5a0eb12095fd50#install' --no-write-lock-file -o result-keystore"
         code_block: "nix build 'github:logos-co/logos-evm-keystore-module#install' --no-write-lock-file -o result-keystore"
 
       # Its own step ON PURPOSE: the harness dispatches
@@ -92,7 +92,7 @@ sections:
         check_file: "result-keystore/modules"
 
       - title: "Build the signer manager"
-        run: "nix build 'github:logos-co/logos-signer-manager-module/bd5c84d21ced71246c4bf44d137aa1c597496fb0#install' --no-write-lock-file -o result-manager"
+        run: "nix build 'github:logos-co/logos-signer-manager-module/471fb75e7f4fab96e798c5945998af1f68f2863d#install' --no-write-lock-file -o result-manager"
         code_block: "nix build 'github:logos-co/logos-signer-manager-module#install' --no-write-lock-file -o result-manager"
 
       - title: "The signer manager really produced modules"
@@ -126,7 +126,7 @@ sections:
         text: |
           A doc-test fixture beside the signer manager: a signer behind the same interface that
           behaves like a device, so the device path runs with no hardware.
-        run: "nix build 'github:logos-co/logos-signer-manager-module/bd5c84d21ced71246c4bf44d137aa1c597496fb0?dir=doctests/mock-device#install' --no-write-lock-file -o result-device"
+        run: "nix build 'github:logos-co/logos-signer-manager-module/471fb75e7f4fab96e798c5945998af1f68f2863d?dir=doctests/mock-device#install' --no-write-lock-file -o result-device"
         code_block: "nix build 'github:logos-co/logos-signer-manager-module?dir=doctests/mock-device#install' --no-write-lock-file -o result-device"
 
       - title: "The mock device really produced a module"
@@ -221,7 +221,7 @@ sections:
 
           ```json
           keystore_module.configure({"custodians": "signer_probe", "managers": "signer_manager_module"})
-          signer_manager_module.configure({"approvers": "evm_signer_ui", "custodians": ["evm_keystore_ui", "signer_probe"], "signers": ["keystore_module", "mock_device_signer"]})
+          signer_manager_module.configure({"approvers": "evm_signer_ui", "custodians": "evm_keystore_ui", "signers": ["keystore_module", "mock_device_signer"]})
           ```
 
           **Every role in each call, deliberately.** `configure` is *total*, not
@@ -449,35 +449,6 @@ sections:
               timeout: 5000
               screenshot: "evm-signer-ui-approved.png"
 
-            - name: "Covered for this app: the signer line says no password is needed"
-              # The probe, playing the keys app as the manager's custodian, unlocked the account
-              # for its own requests with each signature confirmed, and asked again.
-              action: wait_for
-              texts: ["Signs with: This device (Keystore) — no password needed for this request"]
-              timeout: 20000
-
-            - name: "No password field while covered"
-              action: expect_property
-              find_by: "objectName"
-              find_value: "vaultPasswordField"
-              property: "visible"
-              value: false
-
-            - name: "Approve arms after the dwell, with nothing typed"
-              action: wait_for
-              texts: ["Approve"]
-              timeout: 5000
-
-            - name: "Approve, unlocked"
-              action: click
-              target: "Approve"
-
-            - name: "Signed inside the unlock"
-              action: wait_for
-              texts: ["Approved — 1 item signed"]
-              timeout: 20000
-              screenshot: "evm-signer-ui-unlocked.png"
-
             - name: "A Bitcoin send, as the manager reads the PSBT"
               # The probe imports the test phrase as a regtest wallet and asks for a 60,000-sat
               # send with 39,000 back as change. The PSBT is built offline and never broadcast.
@@ -523,35 +494,134 @@ sections:
               action: click
               target: "Approve"
 
-            - name: "Signed: the app unlocks the wallet and asks again"
-              # The status line reads as it did after the last round, so wait on the next
-              # request, which the probe makes only once it holds the signed PSBT.
+            - name: "Reviewed send: the app asks for an allowance"
+              action: wait_for
+              texts: ["Allowances (1)"]
+              timeout: 30000
+
+            - name: "Reviewed send: open the Allowances page"
+              action: click
+              target: "Allowances (1)"
+
+            - name: "Reviewed send: open what it asks for"
+              action: click_object
+              find_value: "allowanceRequestReview"
+
+            - name: "Reviewed send: the manager's words for it"
               action: wait_for
               texts:
-                - "Purpose (claimed by the requester): Doc-test: a regtest send, unlocked"
+                - "signer_probe asks for an allowance"
+                - "Each signature is shown to you, with no password"
+                - "At most 1 signature"
+                - "Spend Bitcoin on regtest"
+              timeout: 5000
+
+            - name: "Reviewed send: the wallet's password grants it"
+              action: set_text
+              find_by: "objectName"
+              find_value: "allowancePassword"
+              value: "btc-pw"
+
+            - name: "Reviewed send: allow it"
+              action: click_object
+              find_value: "allowanceGrant"
+
+            - name: "Reviewed send: back to the requests"
+              action: click_object
+              find_value: "requestsTab"
+
+            - name: "Under the allowance, the app asks again"
+              # The status line reads as it did after the last round, so wait on the next
+              # request, which the probe makes only once the allowance is granted.
+              action: wait_for
+              texts:
+                - "Purpose (claimed by the requester): Doc-test: a regtest send, reviewed"
                 - "Signs with: This device (Keystore) — no password needed for this request"
               timeout: 30000
 
-            - name: "No password field for the unlocked wallet"
+            - name: "No password field under the allowance"
               action: expect_property
               find_by: "objectName"
               find_value: "vaultPasswordField"
               property: "visible"
               value: false
 
-            - name: "Approve arms after the dwell, for the unlocked send"
+            - name: "Approve arms after the dwell, for the reviewed send"
               action: wait_for
               texts: ["Approve"]
               timeout: 5000
 
-            - name: "Approve the unlocked send"
+            - name: "Approve the reviewed send"
               action: click
               target: "Approve"
 
-            - name: "The queue is empty after the unlocked send"
+            - name: "The queue is empty after the reviewed send"
               action: wait_for
               texts: ["No signing requests are waiting."]
               timeout: 20000
+
+            - name: "Reviewed signature: the app asks for an allowance"
+              action: wait_for
+              texts: ["Allowances (1)"]
+              timeout: 30000
+
+            - name: "Reviewed signature: open the Allowances page"
+              action: click
+              target: "Allowances (1)"
+
+            - name: "Reviewed signature: open what it asks for"
+              action: click_object
+              find_value: "allowanceRequestReview"
+
+            - name: "Reviewed signature: the manager's words for it"
+              action: wait_for
+              texts:
+                - "signer_probe asks for an allowance"
+                - "Each signature is shown to you, with no password"
+                - "At most 1 signature"
+              timeout: 5000
+
+            - name: "Reviewed signature: the wallet's password grants it"
+              action: set_text
+              find_by: "objectName"
+              find_value: "allowancePassword"
+              value: "doctest-pw"
+
+            - name: "Reviewed signature: allow it"
+              action: click_object
+              find_value: "allowanceGrant"
+
+            - name: "Reviewed signature: back to the requests"
+              action: click_object
+              find_value: "requestsTab"
+
+            - name: "Covered for this app: the signer line says no password is needed"
+              # The person granted the probe an allowance with each signature shown, and it asked again.
+              action: wait_for
+              texts: ["Signs with: This device (Keystore) — no password needed for this request"]
+              timeout: 20000
+
+            - name: "No password field while covered"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "vaultPasswordField"
+              property: "visible"
+              value: false
+
+            - name: "Approve arms after the dwell, with nothing typed"
+              action: wait_for
+              texts: ["Approve"]
+              timeout: 5000
+
+            - name: "Approve, under the allowance"
+              action: click
+              target: "Approve"
+
+            - name: "Signed under the allowance"
+              action: wait_for
+              texts: ["Approved — 1 item signed"]
+              timeout: 20000
+              screenshot: "evm-signer-ui-reviewed.png"
 
             - name: "A device's request: the device asks the person itself"
               # The probe asks for a signature from the mock device's account; nothing is typed here.
@@ -667,11 +737,11 @@ sections:
       - title: "What the probe collected from the Bitcoin sends"
         text: |
           Each PSBT came back with its one input signed: once with the wallet's password, once
-          inside the unlock.
+          under the allowance.
         run: "grep -h 'SIGNER_PROBE_PSBT' ui-test-app.log"
         expect_contains:
           - "SIGNER_PROBE_PSBT_SIGNED: 1"
-          - "SIGNER_PROBE_PSBT_SIGNED_UNLOCKED: 1"
+          - "SIGNER_PROBE_PSBT_SIGNED_REVIEWED: 1"
 
       - title: "What the probe collected from the device"
         text: |
@@ -710,8 +780,8 @@ sections:
         run: |
           set -euo pipefail
           nix build 'github:logos-co/logos-basecamp#bin-bundle-dir-inspector' --no-write-lock-file -o result-basecamp
-          nix build 'github:logos-co/logos-evm-keystore-module/e83a899a1718ed52e3173dc85d06b15b9c68f41a#install-portable' --no-write-lock-file -o result-keystore-p
-          nix build 'github:logos-co/logos-signer-manager-module/bd5c84d21ced71246c4bf44d137aa1c597496fb0#install-portable' --no-write-lock-file -o result-manager-p
+          nix build 'github:logos-co/logos-evm-keystore-module/eb27b23efe84664bcd66b3a8eb5a0eb12095fd50#install-portable' --no-write-lock-file -o result-keystore-p
+          nix build 'github:logos-co/logos-signer-manager-module/471fb75e7f4fab96e798c5945998af1f68f2863d#install-portable' --no-write-lock-file -o result-manager-p
           nix build 'github:logos-co/logos-evm-signer-ui{release}#install-portable' --no-write-lock-file -o result-signer-p
           mkdir -p bctree/modules bctree/plugins
           cp -r result-keystore-p/modules/* bctree/modules/

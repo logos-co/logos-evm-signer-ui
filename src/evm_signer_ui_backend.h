@@ -61,6 +61,15 @@ public:
     bool consentOpen(QString handle, QString bundleId, QString group) override;
     bool rejectOpen(QString handle) override;
 
+    void refreshAllowances() override;
+    void clearAllowanceError() override;
+    bool grantAllowance(QString grantJson, QString password) override;
+    bool revokeAllowance(QString id) override;
+    bool resumeAllowances(QString account, QString password) override;
+    bool showAllowanceRequest(QString handle) override;
+    bool approveAllowanceRequest(QString handle, QString bundleId, QString decidedJson, QString password) override;
+    bool rejectAllowanceRequest(QString handle) override;
+
 protected:
     void onContextReady() override;
 
@@ -100,6 +109,8 @@ private:
     void endStep(const QString &seed, bool ok);
     /// A wallet call's reply: true when the manager said ok, else its error under the Wallets view.
     bool walletReply(const QString &reply, const QString &fallback);
+    /// An allowance call's reply: true when the manager said ok, else its error on the Allowances page.
+    bool allowanceReply(const QString &reply, const QString &fallback);
 
     /// The scanner's handle for this app's claim on drawing sessions; empty while none is held,
     /// or where qr_scanner_module isn't installed.

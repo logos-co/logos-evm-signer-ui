@@ -45,7 +45,7 @@ Item {
     property var intentByHandle: ({})
 
     // ── wallets ─────────────────────────────────────────────────────────────
-    // 0: the requests, 1: the wallets.
+    // 0: the requests, 1: the wallets, 2: the allowances.
     property int page: 0
     onPageChanged: if (tabs.currentIndex !== page) tabs.currentIndex = page
     // The wallet the Unlock sheet is for, and the open that brought the person there, if any.
@@ -53,6 +53,17 @@ Item {
     property string unlockOpen: ""
     property string ruleSeed: ""
     property string ruleMode: "rule"
+    // The allowance sheet: closed, or `new`, `change` or `request`.
+    property string allowanceMode: ""
+    property var allowanceBeingChanged: null
+    function openAllowance(mode, allowance) {
+        root.backend.clearAllowanceError()
+        root.allowanceBeingChanged = allowance
+        root.allowanceMode = mode
+        allowanceSheet.mode = mode
+        allowanceSheet.existing = allowance
+        allowanceSheet.reset()
+    }
     // The `wallets.unlock` intent being serviced, ended when the wallet unlocks or the sheet closes.
     property string unlockIntent: ""
     // The wallets that intent still asks for after the one on screen, and whether one unlocked.
@@ -207,10 +218,12 @@ Item {
         try { return JSON.parse(backend ? backend.pendingJson : "[]") } catch (e) { return [] }
     }
     readonly property bool showing: ready && backend.renderedHandle !== ""
-    // No secret to type: an unlock covers this request, or its device asks the person itself.
+    // No secret to type: an allowance covers this request, or its device asks the person itself.
     readonly property bool needsSecret: showing && !backend.renderedUnlocked && backend.renderedCollects !== "nothing"
     readonly property var unattended: {
-        try { return JSON.parse(backend ? backend.unattendedJson : "[]") } catch (e) { return [] }
+        try {
+            return JSON.parse(backend ? backend.unattendedJson : "[]").filter(function (s) { return s.how === "unattended" })
+        } catch (e) { return [] }
     }
     // A QR wallet's request, once approved: drawn here, where it was approved, as the codes that
     // carry it to the wallet; then how the camera reads its answer. No picture comes here.
@@ -358,8 +371,16 @@ Item {
             Layout.fillWidth: true
             // Not bound to root.page: a click assigns currentIndex and would break the binding.
             onCurrentIndexChanged: root.page = currentIndex
-            LogosTabButton { text: root.queue.length > 0 ? "Requests (" + root.queue.length + ")" : "Requests" }
+            LogosTabButton {
+                objectName: "requestsTab"
+                text: root.queue.length > 0 ? "Requests (" + root.queue.length + ")" : "Requests"
+            }
             LogosTabButton { text: "Wallets" }
+            LogosTabButton {
+                objectName: "allowancesTab"
+                readonly property int asking: root.ready ? root.parsed(backend.allowanceRequestsJson, []).length : 0
+                text: asking > 0 ? "Allowances (" + asking + ")" : "Allowances"
+            }
         }
 
         StackLayout {
@@ -399,7 +420,7 @@ Item {
                 }
 
                 // ── signed without asking ───────────────────────────────────────────
-                // Inside an unlock the person granted without confirmation: listed, so it is never unseen twice.
+                // Inside an allowance the person granted without review: listed, so it is never unseen twice.
                 LogosText {
                     objectName: "unattendedHeading"
                     visible: !root.showing && root.unattended.length > 0
@@ -519,6 +540,17 @@ Item {
                         text: root.signerLine
                         textFormat: Text.PlainText
                         wrapMode: Text.Wrap
+                    }
+
+                    // Why the password is asked for when an allowance came close to covering this.
+                    LogosText {
+                        objectName: "outsideAllowance"
+                        visible: root.showing && backend.renderedOutside !== ""
+                        Layout.fillWidth: true
+                        text: root.showing ? backend.renderedOutside : ""
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        color: Theme.palette.textSecondary
                     }
 
                     // Which signer signs: the request and its commitment stay the same whichever is picked,
@@ -748,13 +780,26 @@ Item {
                 onRule: function (seed) { root.openRule(seed, "rule") }
                 onKeys: function (seed) { root.openRule(seed, "keys") }
             }
+
+            AllowancesView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                backend: root.ready ? root.backend : null
+                onGrantNew: root.openAllowance("new", null)
+                onChange: function (allowance) { root.openAllowance("change", allowance) }
+                onReview: function (handle) {
+                    logos.watch(root.backend.showAllowanceRequest(handle), function (shown) {
+                        if (shown) root.openAllowance("request", null)
+                    })
+                }
+            }
         }
     }
 
     // ── sheets over the view ────────────────────────────────────────────────
     Rectangle {
         anchors.fill: parent
-        visible: unlockSheet.visible || ruleSheet.visible
+        visible: unlockSheet.visible || ruleSheet.visible || allowanceSheet.visible
         color: "#80000000"
         MouseArea { anchors.fill: parent }
     }
@@ -786,5 +831,14 @@ Item {
         seed: root.ruleSeed
         mode: root.ruleMode
         onClosed: root.ruleSeed = ""
+    }
+    AllowanceSheet {
+        id: allowanceSheet
+        visible: root.allowanceMode !== ""
+        anchors.centerIn: parent
+        width: Math.min(parent.width - 32, 640)
+        height: Math.min(parent.height - 32, implicitHeight)
+        backend: root.ready ? root.backend : null
+        onClosed: root.allowanceMode = ""
     }
 }

@@ -177,7 +177,18 @@ Rectangle {
                   + (sheet.mode === "keys" ? "" : " unlocks")
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
-            font.bold: true
+            font.pixelSize: Theme.typography.panelTitleText
+            font.weight: Theme.typography.weightBold
+        }
+        LogosText {
+            objectName: "ruleSubtitle"
+            Layout.fillWidth: true
+            text: sheet.mode === "keys"
+                  ? "Every app that keeps data for this wallet gets a new key for it, and re-encrypts the data the next time it reads it. Do this if you think someone may have seen one of the current keys."
+                  : "Choose how this wallet unlocks. Each option says what it gains and what it gives up."
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+            color: Theme.palette.textSecondary
         }
 
         // ── the rule ───────────────────────────────────────────────────────
@@ -268,14 +279,7 @@ Rectangle {
         }
 
         // ── new keys ───────────────────────────────────────────────────────
-        LogosText {
-            visible: sheet.mode === "keys"
-            Layout.fillWidth: true
-            text: "Every app that keeps data for this wallet gets a new key for it, and re-encrypts the data "
-                  + "the next time it reads it. Do this if you think someone may have seen one of the current keys."
-            textFormat: Text.PlainText
-            wrapMode: Text.Wrap
-        }
+        // (The "what new keys does" explanation now sits under the title as the subtitle.)
         LogosCheckbox {
             id: nextIndex
             objectName: "keysNextIndex"
@@ -334,6 +338,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
             LogosButton {
                 objectName: "ruleApply"
+                variant: LogosButton.Variant.Primary
                 enabled: !sheet.working && inputs.complete && (sheet.mode === "keys" || (sheet.current !== null && sheet.newPasswordReady))
                 text: sheet.mode === "keys" ? "Make new keys" : "Use this rule"
                 onClicked: sheet.apply()

@@ -94,7 +94,8 @@ Rectangle {
             text: (sheet.unlocked ? "Unlocked: " : "Unlock ") + sheet.title
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
-            font.bold: true
+            font.pixelSize: Theme.typography.panelTitleText
+            font.weight: Theme.typography.weightBold
         }
         LogosText {
             objectName: "unlockAfter"
@@ -106,8 +107,8 @@ Rectangle {
         LogosText {
             Layout.fillWidth: true
             text: sheet.unlocked
-                  ? "Every app can use this wallet until you lock it or quit."
-                  : "Unlocking it here unlocks it for every app until you lock it or quit."
+                  ? "This wallet's accounts are available to apps. You still approve each request. It stays unlocked until you lock it or quit."
+                  : "Makes this wallet's accounts available so apps can ask to use it. You still approve each request. It stays unlocked until you lock it or quit."
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             color: Theme.palette.textSecondary
@@ -142,8 +143,10 @@ Rectangle {
                     onClicked: { sheet.wayIndex = index; inputs.clear() }
                 }
             }
+            // One way in: name it only when there's no device/keystore factor — a device factor is
+            // already spelled out by the holder row below (StepInputs), so naming it here repeats it.
             LogosText {
-                visible: sheet.ways.length === 1
+                visible: sheet.ways.length === 1 && !sheet.takesDevice
                 Layout.fillWidth: true
                 text: sheet.way ? "Unlocks with " + sheet.wayText(sheet.way) + "." : ""
                 textFormat: Text.PlainText
@@ -290,6 +293,7 @@ Rectangle {
                 objectName: "unlockRetry"
                 visible: sheet.retyping
                 enabled: retype.complete
+                variant: LogosButton.Variant.Primary
                 text: "Try again"
                 onClicked: { sheet.backend.retryUnlock(retype.passwordsJson()); retype.clear() }
             }
@@ -297,6 +301,7 @@ Rectangle {
                 objectName: "unlockButton"
                 visible: !sheet.unlocked && !sheet.working && !sheet.retyping && sheet.way !== null
                 enabled: inputs.complete
+                variant: LogosButton.Variant.Primary
                 text: sheet.takesDevice && inputs.asks === "" ? "Unlock with the device" : "Unlock"
                 onClicked: {
                     var holder = sheet.takesDevice && inputs.holder ? inputs.holder.signer : ""

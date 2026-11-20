@@ -16,6 +16,10 @@ ColumnLayout {
     signal keys(string seed)
     spacing: 10
 
+    // Icons for the card kit: a pencil to edit a wallet's names, a lock glyph on a locked wallet.
+    readonly property url iconEdit: Qt.resolvedUrl("assets/edit.svg")
+    readonly property url iconLock: Qt.resolvedUrl("assets/lock.svg")
+
     function parse(raw, empty) {
         try { return JSON.parse(raw) } catch (e) { return empty }
     }
@@ -71,46 +75,36 @@ ColumnLayout {
     property string editing: ""
     property string consentAccount: ""
 
-    RowLayout {
-        Layout.fillWidth: true
-        LogosText {
-            text: "Wallets"
-            textFormat: Text.PlainText
-            font.bold: true
-        }
-        Item { Layout.fillWidth: true }
-        LogosButton {
-            objectName: "lockAllButton"
-            enabled: view.anyUnlocked
-            text: "Lock all"
-            onClicked: view.backend.lockWallets("[]")
-        }
-    }
+    // Content is capped and centred at 560, matching the Keycard app's wallet column.
+    readonly property int contentWidth: 560
+    // No "Wallets" heading or "Lock all" here: the app title names it and carries the Lock all action.
     LogosText {
         objectName: "walletError"
         visible: !!(view.backend && view.backend.walletError)
         Layout.fillWidth: true
+        Layout.maximumWidth: view.contentWidth
+        Layout.alignment: Qt.AlignHCenter
         text: (view.backend && view.backend.walletError) || ""
         textFormat: Text.PlainText
         wrapMode: Text.Wrap
         color: Theme.palette.error
     }
-    LogosText {
+    EmptyState {
         visible: view.wallets.length === 0
-        Layout.fillWidth: true
-        text: "No wallets yet. Add one in the keys app, the Keycard app or QR Wallets: it shows up here."
-        textFormat: Text.PlainText
-        wrapMode: Text.Wrap
+        title: "No wallets yet"
+        subtitle: "Add a wallet in the Keys app, the Keycard app or QR Wallets, and it shows up here to unlock and use."
     }
 
     ScrollView {
+        id: walletScroll
         Layout.fillWidth: true
         Layout.fillHeight: true
         clip: true
         contentWidth: availableWidth
 
         ColumnLayout {
-            width: parent.width
+            width: Math.min(walletScroll.availableWidth, view.contentWidth)
+            x: Math.max(0, (walletScroll.availableWidth - width) / 2)
             spacing: 10
 
             Repeater {
@@ -124,8 +118,15 @@ ColumnLayout {
                     Layout.fillWidth: true
                     namePrefix: "wallet"
                     title: w.privateName || w.name
-                    fingerprint: view.fingerprintOf(mine)
-                    stateText: w.alwaysUnlocked ? "Always unlocked" : w.locked ? "Locked" : "Unlocked"
+                    // Wallet ID = the master fingerprint its accounts carry (shown once unlocked);
+                    // the seed is the keyUid it is recognized by, kept to the tooltip.
+                    walletId: view.fingerprintOf(mine)
+                    walletIdFull: w.seed
+                    editIcon: view.iconEdit
+                    lockIcon: view.iconLock
+                    // The lock glyph already marks a locked wallet, and an unlocked one shows its
+                    // accounts and a Lock button; only "Always unlocked" (unprotected) needs saying.
+                    stateText: w.alwaysUnlocked ? "Always unlocked" : ""
                     lines: [view.holdersText(w) + " · " + view.ruleText(w)]
                            .concat(w.privateName ? ["Shown as “" + w.name + "” while locked"] : [])
                     locked: w.locked
@@ -135,15 +136,18 @@ ColumnLayout {
                     strips: waiting.map(function (o) {
                         return { text: o.requester + " asks to open this wallet", actions: [{ id: "review", label: "Review" }] }
                     })
-                    leftActions: w.locked ? [{ id: "unlock", label: "Unlock…" }]
-                                          : w.alwaysUnlocked ? [] : [{ id: "lock", label: "Lock" }]
-                    rightActions: [{ id: "names", label: "Names…" }]
-                                  .concat(w.locked ? [] : [{ id: "rule", label: "Rule…" }])
+                    // The pencil beside the name edits the wallet's public/private names (below).
+                    actions: [{ id: "rename", label: "Names" }]
+                    // Unlock is the one thing to do on a locked wallet: primary, in the locked row.
+                    lockedActions: w.locked ? [{ id: "unlock", label: "Unlock" }] : []
+                    // Bottom row: Lock on the left; Rule and New keys on the right (unlocked only).
+                    leftActions: !w.locked && !w.alwaysUnlocked ? [{ id: "lock", label: "Lock" }] : []
+                    rightActions: (w.locked ? [] : [{ id: "rule", label: "Rule…" }])
                                   .concat(!w.locked && (w.ways || []).length > 0 ? [{ id: "keys", label: "New keys…" }] : [])
                     onAction: function (id) {
                         if (id === "unlock") view.unlock(card.w.seed, "")
                         else if (id === "lock") view.backend.lockWallets(JSON.stringify([card.w.seed]))
-                        else if (id === "names") view.editing = view.editing === card.w.seed ? "" : card.w.seed
+                        else if (id === "rename") view.editing = view.editing === card.w.seed ? "" : card.w.seed
                         else if (id === "rule") view.rule(card.w.seed)
                         else if (id === "keys") view.keys(card.w.seed)
                     }
@@ -260,115 +264,6 @@ ColumnLayout {
                 }
             }
 
-            // ── passwords ───────────────────────────────────────────────────
-            LogosText {
-                Layout.topMargin: 8
-                text: "Passwords"
-                textFormat: Text.PlainText
-                font.bold: true
-            }
-            LogosText {
-                Layout.fillWidth: true
-                text: "A password can unlock several wallets, as each wallet's rule says. Its name shows when you unlock."
-                textFormat: Text.PlainText
-                wrapMode: Text.Wrap
-                color: Theme.palette.textSecondary
-            }
-            Repeater {
-                model: view.passwords
-                delegate: ColumnLayout {
-                    id: pwRow
-                    objectName: "passwordRow"
-                    Layout.fillWidth: true
-                    spacing: 4
-                    property string mode: ""
-                    RowLayout {
-                        Layout.fillWidth: true
-                        LogosText {
-                            objectName: "passwordName"
-                            Layout.fillWidth: true
-                            text: "“" + modelData.name + "” · unlocks " + modelData.wallets.length
-                                  + " wallet" + (modelData.wallets.length === 1 ? "" : "s")
-                            textFormat: Text.PlainText
-                            elide: Text.ElideRight
-                        }
-                        LogosButton { text: "Rename"; onClicked: pwRow.mode = pwRow.mode === "rename" ? "" : "rename" }
-                        LogosButton { text: "Change"; onClicked: pwRow.mode = pwRow.mode === "change" ? "" : "change" }
-                        LogosButton {
-                            objectName: "passwordRemove"
-                            enabled: modelData.wallets.length === 0
-                            text: "Remove"
-                            onClicked: view.backend.removePassword(modelData.id)
-                        }
-                    }
-                    RowLayout {
-                        visible: pwRow.mode === "rename"
-                        Layout.fillWidth: true
-                        LogosTextField { id: renameField; Layout.fillWidth: true; text: modelData.name }
-                        LogosButton {
-                            text: "Save"
-                            enabled: renameField.text.trim().length > 0
-                            onClicked: { view.backend.renamePassword(modelData.id, renameField.text); pwRow.mode = "" }
-                        }
-                    }
-                    ColumnLayout {
-                        visible: pwRow.mode === "change"
-                        Layout.fillWidth: true
-                        LogosTextField {
-                            id: oldPw; objectName: "passwordOld"; Layout.fillWidth: true
-                            echoMode: TextInput.Password; placeholderText: "Current password"
-                            Component.onCompleted: textInput.passwordMaskDelay = 0
-                        }
-                        LogosTextField {
-                            id: newPw; objectName: "passwordNew"; Layout.fillWidth: true
-                            echoMode: TextInput.Password; placeholderText: "New password, 8 characters or more"
-                            Component.onCompleted: textInput.passwordMaskDelay = 0
-                        }
-                        LogosTextField {
-                            id: newPw2; Layout.fillWidth: true
-                            echoMode: TextInput.Password; placeholderText: "New password again"
-                            Component.onCompleted: textInput.passwordMaskDelay = 0
-                        }
-                        LogosButton {
-                            objectName: "passwordChangeSave"
-                            enabled: oldPw.text.length > 0 && newPw.text.length >= 8 && newPw.text === newPw2.text
-                            text: "Change it"
-                            onClicked: {
-                                view.backend.changePassword(modelData.id, oldPw.text, newPw.text)
-                                oldPw.text = ""; newPw.text = ""; newPw2.text = ""
-                                pwRow.mode = ""
-                            }
-                        }
-                    }
-                }
-            }
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 4
-                LogosTextField {
-                    id: addName; objectName: "passwordAddName"; Layout.fillWidth: true
-                    placeholderText: "New password's name (e.g. Home)"
-                }
-                LogosTextField {
-                    id: addPw; objectName: "passwordAddField"; Layout.fillWidth: true
-                    echoMode: TextInput.Password; placeholderText: "Password, 8 characters or more"
-                    Component.onCompleted: textInput.passwordMaskDelay = 0
-                }
-                LogosTextField {
-                    id: addPw2; Layout.fillWidth: true
-                    echoMode: TextInput.Password; placeholderText: "Password again"
-                    Component.onCompleted: textInput.passwordMaskDelay = 0
-                }
-                LogosButton {
-                    objectName: "passwordAdd"
-                    enabled: addName.text.trim().length > 0 && addPw.text.length >= 8 && addPw.text === addPw2.text
-                    text: "Add password"
-                    onClicked: {
-                        view.backend.createPassword(addName.text, addPw.text)
-                        addName.text = ""; addPw.text = ""; addPw2.text = ""
-                    }
-                }
-            }
         }
     }
 }

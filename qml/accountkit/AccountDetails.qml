@@ -13,10 +13,16 @@ Item {
     property string namePrefix: ""
     // Labels, or { id, label, enabled, tip }; or a function of the entry that returns them.
     property var actions: []
+    // Icons for the inline edit (rename) by the name and the trash (remove) at the far right.
+    property url editIcon: ""
+    property url trashIcon: ""
     signal action(string id, var entry)
     signal copied(string value)
 
     readonly property var shown: Roster.actions(actions, entry)
+    readonly property var editAction: shown.filter(function (a) { return a.id === "rename" })[0] || null
+    readonly property var removeAction: shown.filter(function (a) { return a.id === "remove" })[0] || null
+    readonly property var otherActs: shown.filter(function (a) { return ["rename", "remove"].indexOf(a.id) < 0 })
     readonly property string address: Roster.rowAddress(entry)
     implicitHeight: layout.implicitHeight
     implicitWidth: 480
@@ -47,6 +53,16 @@ Item {
                     textFormat: Text.PlainText
                     font.bold: true
                     elide: Text.ElideRight
+                }
+                LogosIconButton {
+                    objectName: row.namePrefix + "Edit"
+                    visible: !!row.editAction
+                    enabled: !row.editAction || row.editAction.enabled !== false
+                    flat: true; size: 24; iconSize: 13
+                    iconSource: row.editIcon
+                    iconColor: hovered ? Theme.palette.text : Theme.palette.textTertiary
+                    onClicked: if (row.editAction) row.action(row.editAction.id, row.entry)
+                    LogosToolTip { text: "Edit name"; visible: parent.hovered; delay: 400 }
                 }
                 RowLayout {
                     spacing: 8
@@ -113,17 +129,15 @@ Item {
                     visible: row.address.length > 0
                     value: row.address
                     Accessible.name: "Copy address"
-                    ToolTip.text: "Copy address"
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
                     onCopied: function (v) { row.copied(v) }
+                    LogosToolTip { text: "Copy address"; visible: parent.hovered; delay: 400 }
                 }
                 Item { Layout.fillWidth: true }
             }
         }
 
         Repeater {
-            model: row.shown
+            model: row.otherActs
             delegate: LogosButton {
                 required property var modelData
                 objectName: row.namePrefix + "Action_" + Roster.actionName(modelData)
@@ -131,10 +145,22 @@ Item {
                 enabled: modelData.enabled
                 // Compact where the app's design system has it; older pins lack the property.
                 Component.onCompleted: if ("compact" in this) this["compact"] = true
-                ToolTip.text: modelData.tip
-                ToolTip.visible: hovered && modelData.tip.length > 0
-                ToolTip.delay: 400
                 onClicked: row.action(modelData.id, row.entry)
+                LogosToolTip { text: parent.modelData.tip; visible: parent.hovered && parent.modelData.tip.length > 0; delay: 400 }
+            }
+        }
+        LogosIconButton {
+            objectName: row.namePrefix + "Remove"
+            visible: !!row.removeAction
+            enabled: !row.removeAction || row.removeAction.enabled !== false
+            Layout.alignment: Qt.AlignVCenter
+            flat: true; size: 28; iconSize: 16
+            iconSource: row.trashIcon
+            iconColor: hovered ? Theme.palette.text : Theme.palette.textTertiary
+            onClicked: if (row.removeAction) row.action(row.removeAction.id, row.entry)
+            LogosToolTip {
+                text: (row.removeAction && row.removeAction.tip) ? row.removeAction.tip : "Remove"
+                visible: parent.hovered; delay: 400
             }
         }
     }

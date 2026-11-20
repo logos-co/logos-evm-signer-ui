@@ -77,19 +77,7 @@ ColumnLayout {
 
     // Content is capped and centred at 560, matching the Keycard app's wallet column.
     readonly property int contentWidth: 560
-    // No "Wallets" heading here: the app title and the tab already name it. Just the Lock all action.
-    RowLayout {
-        Layout.fillWidth: true
-        Layout.maximumWidth: view.contentWidth
-        Layout.alignment: Qt.AlignHCenter
-        Item { Layout.fillWidth: true }
-        LogosButton {
-            objectName: "lockAllButton"
-            enabled: view.anyUnlocked
-            text: "Lock all"
-            onClicked: view.backend.lockWallets("[]")
-        }
-    }
+    // No "Wallets" heading or "Lock all" here: the app title names it and carries the Lock all action.
     LogosText {
         objectName: "walletError"
         visible: !!(view.backend && view.backend.walletError)
@@ -101,14 +89,10 @@ ColumnLayout {
         wrapMode: Text.Wrap
         color: Theme.palette.error
     }
-    LogosText {
+    EmptyState {
         visible: view.wallets.length === 0
-        Layout.fillWidth: true
-        Layout.maximumWidth: view.contentWidth
-        Layout.alignment: Qt.AlignHCenter
-        text: "No wallets yet. Add one in the keys app, the Keycard app or QR Wallets: it shows up here."
-        textFormat: Text.PlainText
-        wrapMode: Text.Wrap
+        title: "No wallets yet"
+        subtitle: "Add a wallet in the Keys app, the Keycard app or QR Wallets, and it shows up here to unlock and use."
     }
 
     ScrollView {

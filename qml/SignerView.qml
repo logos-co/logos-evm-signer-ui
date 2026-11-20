@@ -206,6 +206,12 @@ Item {
     readonly property var queue: {
         try { return JSON.parse(backend ? backend.pendingJson : "[]") } catch (e) { return [] }
     }
+    // Any wallet currently unlocked — gates the header's "Lock all".
+    readonly property bool anyUnlocked: {
+        if (!ready || backend === null) return false
+        var ws = root.parsed(backend.walletsJson, ({})).wallets || []
+        return ws.some(function (w) { return w.locked === false })
+    }
     readonly property bool showing: ready && backend.renderedHandle !== ""
     // No secret to type: an unlock covers this request, or its device asks the person itself.
     readonly property bool needsSecret: showing && !backend.renderedUnlocked && backend.renderedCollects !== "nothing"
@@ -354,18 +360,21 @@ Item {
                 }
             }
             Item { Layout.fillWidth: true }
+            // "Connecting…" only while the backend is coming up; once ready the view self-updates
+            // (backend polls every 1s and refreshes on manager events), so no status line or Refresh.
             LogosText {
                 Layout.alignment: Qt.AlignVCenter
-                visible: text.length > 0
-                text: root.ready ? backend.statusText : "Connecting…"
+                visible: !root.ready
+                text: "Connecting…"
                 textFormat: Text.PlainText
                 color: Theme.palette.textSecondary
                 font.pixelSize: Theme.typography.secondaryText
             }
             LogosButton {
-                text: "Refresh"
-                enabled: root.ready
-                onClicked: backend.refresh()
+                objectName: "lockAllButton"
+                text: "Lock all"
+                enabled: root.ready && root.anyUnlocked
+                onClicked: root.backend.lockWallets("[]")
             }
         }
 
@@ -401,15 +410,18 @@ Item {
 
                 // ── the queue ───────────────────────────────────────────────────────
                 LogosText {
-                    visible: !root.showing
-                    text: root.queue.length === 0
-                          ? "No signing requests are waiting."
-                          : "Select a request to review:"
+                    visible: !root.showing && root.queue.length > 0
+                    text: "Select a request to review:"
                     textFormat: Text.PlainText
+                }
+                EmptyState {
+                    visible: !root.showing && root.queue.length === 0 && root.unattended.length === 0
+                    title: "No signing requests"
+                    subtitle: "When an app asks you to sign something, it appears here for you to review and approve."
                 }
 
                 ListView {
-                    visible: !root.showing
+                    visible: !root.showing && root.queue.length > 0
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true

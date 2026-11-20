@@ -62,67 +62,96 @@ ColumnLayout {
             }
             Repeater {
                 model: view.passwords
-                delegate: ColumnLayout {
+                delegate: Rectangle {
                     id: pwRow
                     objectName: "passwordRow"
                     Layout.fillWidth: true
-                    spacing: 4
+                    radius: 6
+                    color: Theme.palette.backgroundMuted
+                    border.color: Theme.palette.border
+                    border.width: 1
+                    implicitHeight: pwBody.implicitHeight + 2 * Theme.spacing.medium
                     property string mode: ""
-                    RowLayout {
-                        Layout.fillWidth: true
-                        LogosText {
-                            objectName: "passwordName"
-                            Layout.fillWidth: true
-                            text: "“" + modelData.name + "” · unlocks " + modelData.wallets.length
-                                  + " wallet" + (modelData.wallets.length === 1 ? "" : "s")
-                            textFormat: Text.PlainText
-                            elide: Text.ElideRight
-                        }
-                        LogosButton { text: "Rename"; onClicked: pwRow.mode = pwRow.mode === "rename" ? "" : "rename" }
-                        LogosButton { text: "Change"; onClicked: pwRow.mode = pwRow.mode === "change" ? "" : "change" }
-                        LogosButton {
-                            objectName: "passwordRemove"
-                            enabled: modelData.wallets.length === 0
-                            text: "Remove"
-                            onClicked: view.backend.removePassword(modelData.id)
-                        }
-                    }
-                    RowLayout {
-                        visible: pwRow.mode === "rename"
-                        Layout.fillWidth: true
-                        LogosTextField { id: renameField; Layout.fillWidth: true; text: modelData.name }
-                        LogosButton {
-                            text: "Save"
-                            enabled: renameField.text.trim().length > 0
-                            onClicked: { view.backend.renamePassword(modelData.id, renameField.text); pwRow.mode = "" }
-                        }
-                    }
+
                     ColumnLayout {
-                        visible: pwRow.mode === "change"
-                        Layout.fillWidth: true
-                        LogosTextField {
-                            id: oldPw; objectName: "passwordOld"; Layout.fillWidth: true
-                            echoMode: TextInput.Password; placeholderText: "Current password"
-                            Component.onCompleted: textInput.passwordMaskDelay = 0
+                        id: pwBody
+                        anchors.fill: parent
+                        anchors.margins: Theme.spacing.medium
+                        spacing: Theme.spacing.small
+
+                        // Title (the password's name) + a secondary line (what it unlocks), like a wallet card.
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Theme.spacing.small
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+                                LogosText {
+                                    objectName: "passwordName"
+                                    Layout.fillWidth: true
+                                    text: modelData.name
+                                    textFormat: Text.PlainText
+                                    elide: Text.ElideRight
+                                    font.weight: Theme.typography.weightBold
+                                    font.pixelSize: Theme.typography.subtitleText
+                                }
+                                LogosText {
+                                    Layout.fillWidth: true
+                                    text: modelData.wallets.length === 0
+                                          ? "Not a wallet's unlock rule yet"
+                                          : "Unlocks " + modelData.wallets.length + " wallet" + (modelData.wallets.length === 1 ? "" : "s")
+                                    textFormat: Text.PlainText
+                                    wrapMode: Text.Wrap
+                                    color: Theme.palette.textSecondary
+                                    font.pixelSize: Theme.typography.secondaryText
+                                }
+                            }
+                            LogosButton { text: "Rename"; onClicked: pwRow.mode = pwRow.mode === "rename" ? "" : "rename" }
+                            LogosButton { text: "Change"; onClicked: pwRow.mode = pwRow.mode === "change" ? "" : "change" }
+                            LogosButton {
+                                objectName: "passwordRemove"
+                                enabled: modelData.wallets.length === 0
+                                text: "Remove"
+                                onClicked: view.backend.removePassword(modelData.id)
+                            }
                         }
-                        LogosTextField {
-                            id: newPw; objectName: "passwordNew"; Layout.fillWidth: true
-                            echoMode: TextInput.Password; placeholderText: "New password, 8 characters or more"
-                            Component.onCompleted: textInput.passwordMaskDelay = 0
+                        RowLayout {
+                            visible: pwRow.mode === "rename"
+                            Layout.fillWidth: true
+                            LogosTextField { id: renameField; Layout.fillWidth: true; text: modelData.name }
+                            LogosButton {
+                                text: "Save"
+                                enabled: renameField.text.trim().length > 0
+                                onClicked: { view.backend.renamePassword(modelData.id, renameField.text); pwRow.mode = "" }
+                            }
                         }
-                        LogosTextField {
-                            id: newPw2; Layout.fillWidth: true
-                            echoMode: TextInput.Password; placeholderText: "New password again"
-                            Component.onCompleted: textInput.passwordMaskDelay = 0
-                        }
-                        LogosButton {
-                            objectName: "passwordChangeSave"
-                            enabled: oldPw.text.length > 0 && newPw.text.length >= 8 && newPw.text === newPw2.text
-                            text: "Change it"
-                            onClicked: {
-                                view.backend.changePassword(modelData.id, oldPw.text, newPw.text)
-                                oldPw.text = ""; newPw.text = ""; newPw2.text = ""
-                                pwRow.mode = ""
+                        ColumnLayout {
+                            visible: pwRow.mode === "change"
+                            Layout.fillWidth: true
+                            LogosTextField {
+                                id: oldPw; objectName: "passwordOld"; Layout.fillWidth: true
+                                echoMode: TextInput.Password; placeholderText: "Current password"
+                                Component.onCompleted: textInput.passwordMaskDelay = 0
+                            }
+                            LogosTextField {
+                                id: newPw; objectName: "passwordNew"; Layout.fillWidth: true
+                                echoMode: TextInput.Password; placeholderText: "New password, 8 characters or more"
+                                Component.onCompleted: textInput.passwordMaskDelay = 0
+                            }
+                            LogosTextField {
+                                id: newPw2; Layout.fillWidth: true
+                                echoMode: TextInput.Password; placeholderText: "New password again"
+                                Component.onCompleted: textInput.passwordMaskDelay = 0
+                            }
+                            LogosButton {
+                                objectName: "passwordChangeSave"
+                                enabled: oldPw.text.length > 0 && newPw.text.length >= 8 && newPw.text === newPw2.text
+                                text: "Change it"
+                                onClicked: {
+                                    view.backend.changePassword(modelData.id, oldPw.text, newPw.text)
+                                    oldPw.text = ""; newPw.text = ""; newPw2.text = ""
+                                    pwRow.mode = ""
+                                }
                             }
                         }
                     }

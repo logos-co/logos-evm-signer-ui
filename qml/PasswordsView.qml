@@ -31,17 +31,7 @@ ColumnLayout {
     // Content is capped and centred at 560, matching the Wallets tab.
     readonly property int contentWidth: 560
 
-    LogosText {
-        objectName: "passwordError"
-        visible: !!(view.backend && view.backend.walletError)
-        Layout.fillWidth: true
-        Layout.maximumWidth: view.contentWidth
-        Layout.alignment: Qt.AlignHCenter
-        text: (view.backend && view.backend.walletError) || ""
-        textFormat: Text.PlainText
-        wrapMode: Text.Wrap
-        color: Theme.palette.error
-    }
+    // No error line here: every password action happens in the sheet, which shows its own error.
 
     // The add action sits on top of the list, full column width. The empty state offers its own
     // button instead, so this one is only shown once there are passwords.

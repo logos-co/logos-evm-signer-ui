@@ -65,7 +65,7 @@ Rectangle {
 
     // add/rename/remove call refreshWallets, so the wallet settings change after the op: close on
     // that change when there is no error, and stay open showing the error otherwise. change has no
-    // settings delta, so it closes optimistically and any failure shows on the Passwords tab.
+    // settings delta, so it waits for changePassword's own answer instead (logos.watch).
     property bool awaiting: false
     onSettingsChanged: {
         if (!sheet.awaiting || sheet.mode === "change") return
@@ -82,8 +82,13 @@ Rectangle {
         else if (sheet.mode === "rename")
             sheet.backend.renamePassword(sheet.pwId, renameName.text)
         else if (sheet.mode === "change") {
-            sheet.backend.changePassword(sheet.pwId, oldPw.text, newPw.text)
-            sheet.awaiting = false; sheet.clear(); sheet.closed()
+            // Close only once it worked; a wrong current password keeps the sheet open, its
+            // error shown here (walletError), with the typed passwords cleared to retype.
+            logos.watch(sheet.backend.changePassword(sheet.pwId, oldPw.text, newPw.text), function (ok) {
+                sheet.awaiting = false
+                if (ok) { sheet.clear(); sheet.closed() }
+                else { oldPw.text = ""; newPw.text = ""; newPw2.text = "" }
+            })
         } else if (sheet.mode === "remove")
             sheet.backend.removePassword(sheet.pwId)
     }

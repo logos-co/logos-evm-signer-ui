@@ -9,6 +9,9 @@ Item {
     id: es
     property string title: ""
     property string subtitle: ""
+    // Optional call to action under the explanation: a small, centred button.
+    property string actionText: ""
+    signal action()
 
     Layout.fillWidth: true
     implicitHeight: col.implicitHeight + 2 * Theme.spacing.xxlarge
@@ -39,6 +42,15 @@ Item {
             textFormat: Text.PlainText
             color: Theme.palette.textSecondary
             text: es.subtitle
+        }
+        LogosButton {
+            objectName: "emptyStateAction"
+            visible: es.actionText !== ""
+            Layout.alignment: Qt.AlignHCenter
+            Layout.topMargin: Theme.spacing.small
+            variant: LogosButton.Variant.Primary
+            text: es.actionText
+            onClicked: es.action()
         }
     }
 }

@@ -53,6 +53,17 @@ Item {
     property string unlockOpen: ""
     property string ruleSeed: ""
     property string ruleMode: "rule"
+    // The password sheet over the Passwords tab: "" | add | rename | change | remove, plus its target.
+    property string pwMode: ""
+    property string pwId: ""
+    property string pwName: ""
+    property int pwWallets: 0
+    function openPw(mode, id, name, wallets) {
+        root.pwId = id || ""
+        root.pwName = name || ""
+        root.pwWallets = wallets || 0
+        root.pwMode = mode
+    }
     // The `wallets.unlock` intent being serviced, ended when the wallet unlocks or the sheet closes.
     property string unlockIntent: ""
     // The wallets that intent still asks for after the one on screen, and whether one unlocked.
@@ -401,6 +412,8 @@ Item {
         StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            // Breathing room between the tab bar and the tab content, as in the Keycard app.
+            Layout.topMargin: Theme.spacing.medium
             currentIndex: root.page
 
             ColumnLayout {
@@ -792,6 +805,10 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 backend: root.ready ? root.backend : null
+                onAddPassword: root.openPw("add", "", "", 0)
+                onRenamePassword: function (id, name) { root.openPw("rename", id, name, 0) }
+                onChangePassword: function (id, name) { root.openPw("change", id, name, 0) }
+                onRemovePassword: function (id, name, wallets) { root.openPw("remove", id, name, wallets) }
             }
         }
     }
@@ -799,7 +816,7 @@ Item {
     // ── sheets over the view ────────────────────────────────────────────────
     Rectangle {
         anchors.fill: parent
-        visible: unlockSheet.visible || ruleSheet.visible
+        visible: unlockSheet.visible || ruleSheet.visible || pwSheet.visible
         color: "#80000000"
         MouseArea { anchors.fill: parent }
     }
@@ -831,5 +848,19 @@ Item {
         seed: root.ruleSeed
         mode: root.ruleMode
         onClosed: root.ruleSeed = ""
+    }
+    PasswordSheet {
+        id: pwSheet
+        visible: root.pwMode !== ""
+        anchors.centerIn: parent
+        width: Math.min(parent.width - 32, 640)
+        height: Math.min(parent.height - 32, implicitHeight)
+        backend: root.ready ? root.backend : null
+        mode: root.pwMode
+        pwId: root.pwId
+        pwName: root.pwName
+        pwWallets: root.pwWallets
+        onClosed: root.pwMode = ""
+        onVisibleChanged: if (visible) reset()
     }
 }

@@ -6,7 +6,9 @@ import Logos.Theme
 import "accountkit" as Accounts
 
 // Every wallet, whichever signers hold it: its names, its holders, how it unlocks, its accounts
-// once unlocked, and the apps waiting to open it. Device setup stays in each device's own app.
+// once unlocked, and the apps waiting to open it. Read-only: a wallet is renamed or removed in the
+// app that owns it (Keys, Keycard, QR Wallets), and device setup stays there too. Here it is only
+// unlocked, locked, and given its unlock rule.
 ColumnLayout {
     id: view
     objectName: "walletsView"
@@ -16,8 +18,7 @@ ColumnLayout {
     signal keys(string seed)
     spacing: 10
 
-    // Icons for the card kit: a pencil to edit a wallet's names, a lock glyph on a locked wallet.
-    readonly property url iconEdit: Qt.resolvedUrl("assets/edit.svg")
+    // A lock glyph on a locked wallet. No edit or trash icon: the Signer doesn't rename or remove.
     readonly property url iconLock: Qt.resolvedUrl("assets/lock.svg")
 
     function parse(raw, empty) {
@@ -29,7 +30,6 @@ ColumnLayout {
     readonly property var roster: parse(backend ? backend.rosterJson : "[]", [])
     readonly property var opens: parse(backend ? backend.opensJson : "[]", [])
     readonly property var shownOpen: parse(backend ? backend.openJson : "{}", ({}))
-    readonly property bool anyUnlocked: wallets.some(function (w) { return !w.locked })
 
     function accountsOf(seed) { return roster.filter(function (a) { return a.seed === seed }) }
     // The master fingerprint its accounts carry: the Wallet ID every holder's app shows.
@@ -42,6 +42,19 @@ ColumnLayout {
     function holderLabel(h) {
         var named = { keystore: "Keystore", keycard: "Keycard", keycard_shell: "Keycard Shell", qr: "QR wallet" }
         return named[h.kind] || h.signer
+    }
+    // The apps a wallet is renamed or removed in: the ones its holders belong to.
+    function ownerApp(h) {
+        var apps = { keystore: "the Keys app", keycard: "the Keycard app", keycard_shell: "the Keycard app", qr: "QR Wallets" }
+        return apps[h.kind] || ""
+    }
+    function ownerText(w) {
+        var out = []
+        for (var i = 0; i < (w.holders || []).length; i++) {
+            var a = ownerApp(w.holders[i])
+            if (a && out.indexOf(a) < 0) out.push(a)
+        }
+        return out.length > 0 ? "Rename or remove it in " + out.join(" or ") + "." : ""
     }
     function holdersText(w) {
         var seen = [], out = []
@@ -72,7 +85,6 @@ ColumnLayout {
         return family + " · " + (own ? own + " · " : "") + where
     }
 
-    property string editing: ""
     property string consentAccount: ""
 
     // Content is capped and centred at 560, matching the Keycard app's wallet column.
@@ -122,13 +134,13 @@ ColumnLayout {
                     // the seed is the keyUid it is recognized by, kept to the tooltip.
                     walletId: view.fingerprintOf(mine)
                     walletIdFull: w.seed
-                    editIcon: view.iconEdit
                     lockIcon: view.iconLock
                     // The lock glyph already marks a locked wallet, and an unlocked one shows its
                     // accounts and a Lock button; only "Always unlocked" (unprotected) needs saying.
                     stateText: w.alwaysUnlocked ? "Always unlocked" : ""
                     lines: [view.holdersText(w) + " · " + view.ruleText(w)]
                            .concat(w.privateName ? ["Shown as “" + w.name + "” while locked"] : [])
+                           .concat(view.ownerText(w) ? [view.ownerText(w)] : [])
                     locked: w.locked
                     lockedText: "Locked · its ID and accounts show once you unlock it."
                     accounts: w.locked ? [] : mine
@@ -136,8 +148,6 @@ ColumnLayout {
                     strips: waiting.map(function (o) {
                         return { text: o.requester + " asks to open this wallet", actions: [{ id: "review", label: "Review" }] }
                     })
-                    // The pencil beside the name edits the wallet's public/private names (below).
-                    actions: [{ id: "rename", label: "Names" }]
                     // Unlock is the one thing to do on a locked wallet: primary, in the locked row.
                     lockedActions: w.locked ? [{ id: "unlock", label: "Unlock" }] : []
                     // Bottom row: Lock on the left; Rule and New keys on the right (unlocked only).
@@ -147,52 +157,10 @@ ColumnLayout {
                     onAction: function (id) {
                         if (id === "unlock") view.unlock(card.w.seed, "")
                         else if (id === "lock") view.backend.lockWallets(JSON.stringify([card.w.seed]))
-                        else if (id === "rename") view.editing = view.editing === card.w.seed ? "" : card.w.seed
                         else if (id === "rule") view.rule(card.w.seed)
                         else if (id === "keys") view.keys(card.w.seed)
                     }
                     onStripAction: function (i, id) { view.unlock(card.w.seed, card.waiting[i].handle) }
-
-                // ── names ──────────────────────────────────────────
-                ColumnLayout {
-                    visible: view.editing === card.w.seed
-                    Layout.fillWidth: true
-                    spacing: 4
-                    LogosTextField {
-                        id: publicName
-                        objectName: "walletPublicName"
-                        Layout.fillWidth: true
-                        text: card.w.name
-                        placeholderText: "Name shown while locked"
-                    }
-                    LogosTextField {
-                        id: privateName
-                        objectName: "walletPrivateName"
-                        visible: !card.w.locked
-                        Layout.fillWidth: true
-                        text: card.w.privateName || ""
-                        placeholderText: "Private name, shown only once unlocked (optional)"
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Item { Layout.fillWidth: true }
-                        LogosButton {
-                            text: "Cancel"
-                            onClicked: view.editing = ""
-                        }
-                        LogosButton {
-                            objectName: "walletNamesSave"
-                            enabled: publicName.text.trim().length > 0
-                            text: "Save"
-                            onClicked: {
-                                // A locked wallet's private name can't be read, so it is left as it is.
-                                if (card.w.locked) view.backend.setNames(card.w.seed, publicName.text, "")
-                                else view.backend.setNames(card.w.seed, publicName.text, privateName.text)
-                                view.editing = ""
-                            }
-                        }
-                    }
-                }
                 }
             }
 

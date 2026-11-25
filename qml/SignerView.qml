@@ -361,7 +361,7 @@ Item {
                         objectName: "signerInfo"
                         title: "What the Signer does"
                         Accessible.name: "Help: what the Signer does"
-                        text: "The Signer keeps your wallets' unlock keys, passwords and rules, and it is the only screen that shows what you are about to sign and takes your vault password. Wallets appear here once a device or key app (Keycard, Keys, a QR wallet) enrolls them; each unlocks by its own rule. Names and rules you set here are saved on this computer."
+                        text: "The Signer keeps your wallets' unlock keys, passwords and rules, and it is the only screen that shows what you are about to sign and takes your vault password. Wallets appear here once a device or key app (Keycard, Keys, a QR wallet) enrolls them; each unlocks by its own rule. Rules and passwords you set here are saved on this computer; a wallet is renamed or removed in the app that holds it."
                     }
                 }
                 LogosText {

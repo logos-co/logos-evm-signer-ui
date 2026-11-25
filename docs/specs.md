@@ -48,6 +48,28 @@ space holds both. This is a **code-authority boundary enforced by the manager's
 caller check, not a process boundary** between requester and approver. Anyone
 expecting the latter will be wrong.
 
+## The surface
+
+- **Header:** the "Signer" title with an info button ("What the Signer does"), the subtitle
+  "Signing requests and wallets", and **Lock all**, so a global action is reachable from every tab.
+  "Connecting…" shows while the backend comes up. There is no Refresh: the backend polls every
+  second (`kPollMs`) and refreshes on every manager event, so the view keeps itself current. If the
+  poll goes, a refresh has to come back.
+- **Tabs:** Requests · Wallets · Passwords. The Wallets and Passwords columns are capped at 560 and
+  centred, as in the Keycard app.
+- **Status line:** the top of the Requests tab shows the backend's `statusText` only when it says
+  something the person waits for: an approval's outcome ("Approved — 3 items signed", which the
+  backend holds past the next poll), a device at work, or the manager out of reach. The routine
+  "Ready", "Nothing to approve" and "N waiting" stay hidden, since the tab count and the queue say
+  them.
+- **Empty states:** an empty tab shows `EmptyState` (a centred title, one line of explanation and
+  an optional button) instead of a stray line: "No signing requests", "No wallets yet", "No
+  passwords yet".
+- **Sheets:** Unlock, Rule / New keys and Password sheets share one shape: a bold title, one line
+  that says what the action does, the inputs, then Cancel and one primary action.
+- **App icon:** `src/icons/signer.png` is full-bleed (256×256, opaque to the edges, the keyhole on
+  black as on the Keycard tile), and Basecamp masks it to the tile shape.
+
 ## Rendering rules
 
 - `renderLines` come from `signer_manager_module.acknowledge` and are displayed
@@ -153,22 +175,41 @@ data in every module is encrypted under keys the signer manager derives from tha
 the person unlocks it here, once, for every app, until they lock it or quit. The **Wallets** tab
 lists every wallet from the manager's `wallet_settings`: its public name, and its private name
 once unlocked; its holders; how it unlocks; its accounts once unlocked (from `roster`, by
-`seed`); and the apps waiting to open it (`access_requests`, by `seed`). Device setup stays in
-each device's own app.
+`seed`); and the apps waiting to open it (`access_requests`, by `seed`).
+
+The Signer is **read-only about the wallets themselves** (decided 2026-11-24): a wallet is renamed
+or removed only in the app that holds it (Keys, Keycard, QR Wallets), and each card says which
+("Rename or remove it in the Keycard app."). Device setup stays there too. Here a wallet is only
+unlocked, locked, given its rule and given new keys.
 
 Each wallet is [logos-account-kit](https://github.com/logos-co/logos-account-kit)'s
-`WalletCard`, vendored in `qml/accountkit`, as in the Keycard and Keys apps:
-- its **Wallet ID** is the master fingerprint its accounts carry (`wallet.fingerprint`);
-- each account row shows its name and number, derivation path, and address: an EVM account's own,
-  or a Bitcoin account's first receiving address (0/0), from the roster's `firstAddress`;
-- a locked wallet shows neither, since its accounts aren't in `roster` until it unlocks.
+`WalletCard`, as in the Keycard and Keys apps. `qml/accountkit` is the kit at the commit its
+`VERSION` names, byte for byte (CI runs the kit's `scripts/check.sh`), so anything Signer-specific
+lives in `WalletsView.qml` and the card's properties, never in the vendored folder:
+- its **Wallet ID** is the master fingerprint its accounts carry (`wallet.fingerprint`), with the
+  seed in its tooltip;
+- each account row shows its name (an unnamed one by family and number, "Bitcoin 0"), a Bitcoin
+  account's script type and network as tags, its derivation path, and its address: an EVM
+  account's own, or a Bitcoin account's first receiving address (0/0), from the roster's
+  `firstAddress`;
+- a locked wallet shows neither, since its accounts aren't in `roster` until it unlocks; a lock
+  glyph sits before its name and **Unlock** is its primary action. Only "Always unlocked" is
+  printed as a state, since nothing else shows it;
+- the Signer passes no edit or trash icon and no rename action, so neither the card nor its rows
+  offer to rename or remove.
 
-- **The Unlock sheet** offers the wallet's ways in and asks for what the chosen one takes:
+- **The Unlock sheet** is titled with the wallet's name and says what unlocking does: the
+  accounts become available for apps to ask for, and each request is still approved here. It
+  offers the wallet's ways in and asks for what the chosen one takes:
   - which holder to ask when it takes the device;
   - the card's PIN, or the keystore's password;
   - nothing for a Shell, which asks the person itself;
   - a QR round trip drawn here, as for signing;
   - each named password, by the name the person gave it.
+
+  With one way in, a line names it ("Unlocks with the device and the password “Home”.") unless
+  it is the device alone, which the holder row already names; so a way that takes a password keeps
+  that password's name on screen once its field is typed into.
 
   `unlock_wallet` either settles at once or starts a device step, which `unlock_progress`
   follows. When the device answered but a password didn't match, the sheet asks for the password
@@ -190,13 +231,21 @@ Each wallet is [logos-account-kit](https://github.com/logos-co/logos-account-kit
   Each says what it gains and what it gives up. A keystore wallet's "device" is its own keystore
   password. A new way that takes the device asks the device again, and a new password is made
   before the rule that takes it.
-- **Passwords** are named, can unlock several wallets, and are added, renamed, changed and
-  removed here; one a rule still takes can't be removed.
+- **Passwords** are the Signer's own, on their own tab. They are named, can unlock several
+  wallets, and are added, renamed, changed and removed here. Each is a card: its name with a pencil
+  (rename), and on the right a pencil (change) and a trash (remove); **Add password** sits above
+  the list, or in the empty state. Every action happens in a sheet that waits for the backend's own
+  answer: only a success clears and closes it, and a failure keeps what was typed and shows the
+  error in the sheet. The sheet's fields are cleared whenever it hides, and leaving the tab closes
+  it, so nothing typed stays in a hidden field. The trash always opens the sheet: a password a rule
+  still takes isn't removed, and the sheet says which rules to change first.
 - **New keys** wrap every way in again, so they need each way's factors. For a wallet a QR wallet
   holds, an option also moves to the device's next unlock key, for when the QR answer may have been
   photographed. It isn't offered otherwise: a card's, a Shell's or the keystore's answer never
   leaves this computer, and whoever could read it here could read the next one too.
-- **Lock** locks one wallet, **Lock all** every wallet.
+- **Lock** locks one wallet, **Lock all** every wallet. Lock all is armed only while a wallet a
+  lock would close is unlocked: an always-unlocked wallet stays open whatever is locked, so it
+  doesn't count.
 - **`wallets.unlock`** (`{ seeds?, signer?, openHandle? }`) opens the sheet for the wallet an open names,
   else for each locked one of `seeds`, or each locked wallet when it names none, one after another
   in the wallets' order. It is answered `ok` once the last unlocks (or, with an open, once the open
@@ -226,6 +275,10 @@ copy afterwards.
 
 ## Known gaps
 
+- **Two name stores.** The Signer shows the manager's public and private names but no longer edits
+  them (the backend's `setNames` stays, unused by the view). The Keycard app's rename writes its
+  own store, so a rename there doesn't reach the Signer until the owning apps write the manager's
+  names.
 - **No autoload.** If this plugin is not open, `request_approval` still succeeds
   and the record waits — but nothing shows it. If the user also closes the
   requesting tab, the system stays correct and becomes silent. A shell attention

@@ -16,6 +16,11 @@ ColumnLayout {
     signal unlock(string seed, string openHandle)
     signal rule(string seed)
     signal keys(string seed)
+    // An action taken on the page itself, so the host shows its answer here.
+    signal acting()
+    // The page's own wallet error, as the host decides it: empty while a sheet is up, and never one
+    // a sheet already showed. Not the backend's walletError, which the sheets share.
+    property string error: ""
     spacing: 10
 
     // A lock glyph on a locked wallet. No edit or trash icon: the Signer doesn't rename or remove.
@@ -92,11 +97,11 @@ ColumnLayout {
     // No "Wallets" heading or "Lock all" here: the app title names it and carries the Lock all action.
     LogosText {
         objectName: "walletError"
-        visible: !!(view.backend && view.backend.walletError)
+        visible: view.error !== ""
         Layout.fillWidth: true
         Layout.maximumWidth: view.contentWidth
         Layout.alignment: Qt.AlignHCenter
-        text: (view.backend && view.backend.walletError) || ""
+        text: view.error
         textFormat: Text.PlainText
         wrapMode: Text.Wrap
         color: Theme.palette.error
@@ -156,7 +161,7 @@ ColumnLayout {
                                   .concat(!w.locked && (w.ways || []).length > 0 ? [{ id: "keys", label: "New keys…" }] : [])
                     onAction: function (id) {
                         if (id === "unlock") view.unlock(card.w.seed, "")
-                        else if (id === "lock") view.backend.lockWallets(JSON.stringify([card.w.seed]))
+                        else if (id === "lock") { view.acting(); view.backend.lockWallets(JSON.stringify([card.w.seed])) }
                         else if (id === "rule") view.rule(card.w.seed)
                         else if (id === "keys") view.keys(card.w.seed)
                     }
@@ -185,7 +190,7 @@ ColumnLayout {
                         LogosButton {
                             visible: !pick.shown
                             text: "Review"
-                            onClicked: { view.consentAccount = ""; view.backend.showOpen(modelData.handle) }
+                            onClicked: { view.consentAccount = ""; view.acting(); view.backend.showOpen(modelData.handle) }
                         }
                     }
                     Repeater {
@@ -219,14 +224,14 @@ ColumnLayout {
                         Layout.fillWidth: true
                         LogosButton {
                             text: "Refuse"
-                            onClicked: view.backend.rejectOpen(modelData.handle)
+                            onClicked: { view.acting(); view.backend.rejectOpen(modelData.handle) }
                         }
                         Item { Layout.fillWidth: true }
                         LogosButton {
                             objectName: "pickOpenConsent"
                             enabled: view.consentAccount !== ""
                             text: "Open it for that app"
-                            onClicked: view.backend.consentOpen(modelData.handle, view.shownOpen.bundle_id, view.consentAccount)
+                            onClicked: { view.acting(); view.backend.consentOpen(modelData.handle, view.shownOpen.bundle_id, view.consentAccount) }
                         }
                     }
                 }

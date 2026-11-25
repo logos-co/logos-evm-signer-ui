@@ -3,6 +3,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import Logos.Controls
 import Logos.Theme
+import "errors.js" as Errors
 
 // A wallet's rule, or new keys for it. Each rule says what it gains and what it gives up, so the
 // convenient choice is always there and never the silent default.
@@ -64,8 +65,14 @@ Rectangle {
     property int choice: 0
     // An existing password's id, or `new`.
     property string passwordId: ""
+    // What went wrong with this sheet's own change, as it answered: never the backend's live
+    // walletError, which other views share. Cleared on open, on apply and on close.
+    property string error: ""
+    property int attempt: 0
     // Start from the wallet's rule as it is.
     function reset() {
+        error = ""
+        attempt++
         inputs.clear()
         nextIndex.checked = false
         passwordId = ""
@@ -135,27 +142,37 @@ Rectangle {
     function apply() {
         var holder = inputs.holder ? inputs.holder.signer : ""
         var secret = sheet.newDeviceWay ? inputs.secret : ""
+        var be = backend
+        sheet.error = ""
+        var mine = ++sheet.attempt
+        // A refusal names why in walletError as the call answers; it is read then, and only here.
+        var answered = function (ok) {
+            if (mine === sheet.attempt && !ok) sheet.error = Errors.human(be.walletError) || "That did not work. Try again."
+        }
+        var lost = function () { if (mine === sheet.attempt) sheet.error = "The Signer did not answer. Try again." }
         if (mode === "keys") {
-            backend.changeKeys(seed, sheet.offersNewUnlockKey && nextIndex.checked, sheet.newDeviceWay ? holder : "", secret, inputs.passwordsJson())
+            logos.watch(be.changeKeys(seed, sheet.offersNewUnlockKey && nextIndex.checked, sheet.newDeviceWay ? holder : "", secret, inputs.passwordsJson()),
+                        answered, lost)
             inputs.clear()
             return
         }
         var run = function (pid, typed) {
-            backend.setRule(seed, JSON.stringify(sheet.waysFor(sheet.current.key, pid)),
-                            sheet.newDeviceWay ? holder : "", secret, typed)
+            logos.watch(be.setRule(seed, JSON.stringify(sheet.waysFor(sheet.current.key, pid)),
+                                   sheet.newDeviceWay ? holder : "", secret, typed),
+                        answered, lost)
             inputs.clear()
         }
         if (needsPassword && chosenPassword === "new") {
             var name = newName.text.trim(), pw = newPassword.text
             newPassword.text = ""
             newAgain.text = ""
-            logos.watch(backend.createPassword(name, pw), function (id) {
-                if (!id) return
+            logos.watch(be.createPassword(name, pw), function (id) {
+                if (!id) { answered(false); return }
                 var typed = {}
                 typed[id] = pw
                 run(id, JSON.stringify(typed))
                 pw = ""
-            })
+            }, lost)
             return
         }
         run(chosenPassword, inputs.passwordsJson())
@@ -315,9 +332,10 @@ Rectangle {
             backend: sheet.backend
         }
         LogosText {
-            visible: !!(sheet.backend && sheet.backend.walletError)
+            objectName: "ruleError"
+            visible: sheet.error !== ""
             Layout.fillWidth: true
-            text: (sheet.backend && sheet.backend.walletError) || ""
+            text: sheet.error
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             color: Theme.palette.error
@@ -331,6 +349,8 @@ Rectangle {
                 text: sheet.working ? "Cancel" : "Close"
                 onClicked: {
                     if (sheet.working) sheet.backend.cancelUnlock()
+                    sheet.error = ""
+                    sheet.attempt++
                     inputs.clear()
                     sheet.closed()
                 }

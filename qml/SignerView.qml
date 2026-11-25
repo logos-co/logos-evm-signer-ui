@@ -3,6 +3,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import Logos.Controls
 import Logos.Theme
+import "errors.js" as Errors
 
 // The signing approval surface.
 //
@@ -51,7 +52,21 @@ Item {
     onPageChanged: {
         if (tabs.currentIndex !== page) tabs.currentIndex = page
         if (page !== 2) root.pwMode = ""
+        root.walletErrorSeen = root.ready ? backend.walletError : ""
     }
+
+    // ── one error, one place ────────────────────────────────────────────────
+    // The backend keeps a single walletError for every wallet action, and it stays set until the
+    // next action succeeds. A sheet reads it as its own call answers and shows it itself, so the
+    // page line behind it shows only what the page did: never while a sheet is up, and never an
+    // error already shown before a sheet opened or closed or the tab changed.
+    readonly property bool sheetUp: unlockSheet.visible || ruleSheet.visible || pwSheet.visible
+    property string walletErrorSeen: ""
+    onSheetUpChanged: root.walletErrorSeen = root.ready ? backend.walletError : ""
+    // An action on the page itself: its answer shows on the page, even worded as the last one.
+    function pageAction() { root.walletErrorSeen = "" }
+    readonly property string pageWalletError:
+        !ready || sheetUp || backend.walletError === walletErrorSeen ? "" : Errors.human(backend.walletError)
     // The wallet the Unlock sheet is for, and the open that brought the person there, if any.
     property string unlockSeed: ""
     property string unlockOpen: ""
@@ -78,8 +93,9 @@ Item {
     }
     function openUnlock(seed, openHandle) {
         root.page = 1
-        root.unlockOpen = openHandle || ""
+        // The wallet first: the sheet starts clean for it, then shows the open it was brought for.
         root.unlockSeed = seed
+        root.unlockOpen = openHandle || ""
     }
     function closeUnlock(ok) {
         root.unlockSeed = ""
@@ -211,6 +227,9 @@ Item {
             var next = root.nextQueued()
             if (next !== "") root.unlockSeed = next
             else root.closeUnlock(true)
+        }
+        function onWalletErrorChanged() {
+            if (root.backend.walletError === "") root.walletErrorSeen = ""
         }
         function onOpenSettled(handle, state) {
             if (handle === root.unlockOpen) root.closeUnlock(state === "approved")
@@ -390,14 +409,15 @@ Item {
                 objectName: "lockAllButton"
                 text: "Lock all"
                 enabled: root.ready && root.anyLockable
-                onClicked: root.backend.lockWallets("[]")
+                onClicked: { root.pageAction(); root.backend.lockWallets("[]") }
             }
         }
 
         LogosText {
-            visible: root.ready && backend.lastError !== ""
+            objectName: "requestError"
+            visible: root.ready && backend.lastError !== "" && !root.sheetUp
             Layout.fillWidth: true
-            text: root.ready ? backend.lastError : ""
+            text: root.ready ? Errors.human(backend.lastError) : ""
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             color: Theme.palette.error
@@ -818,6 +838,8 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 backend: root.ready ? root.backend : null
+                error: root.pageWalletError
+                onActing: root.pageAction()
                 onUnlock: function (seed, openHandle) { root.openUnlock(seed, openHandle) }
                 onRule: function (seed) { root.openRule(seed, "rule") }
                 onKeys: function (seed) { root.openRule(seed, "keys") }

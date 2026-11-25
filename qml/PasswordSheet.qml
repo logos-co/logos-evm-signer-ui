@@ -53,8 +53,10 @@ Rectangle {
         renameName.text = pwName
         oldPw.text = ""; newPw.text = ""; newPw2.text = ""
     }
-    // Called by the host when the sheet opens, so it never reopens pre-filled or mid-wait.
-    function reset() { awaiting = false; clear() }
+    // Called by the host whenever the sheet shows or hides: it never reopens pre-filled, and what
+    // was typed doesn't stay behind in hidden fields once it closes. An answer still on its way
+    // for the sheet as it was is ignored.
+    function reset() { awaiting = false; attempt++; clear() }
 
     readonly property bool canSubmit:
           mode === "add"    ? (addName.text.trim().length > 0 && addPw.text.length >= 8 && addPw.text === addPw2.text)
@@ -63,34 +65,29 @@ Rectangle {
         : mode === "remove" ? (pwWallets === 0)
         : false
 
-    // add/rename/remove call refreshWallets, so the wallet settings change after the op: close on
-    // that change when there is no error, and stay open showing the error otherwise. change has no
-    // settings delta, so it waits for changePassword's own answer instead (logos.watch).
+    // Every action waits for the backend's own answer. Only a success clears the fields and closes
+    // the sheet; a failure keeps what was typed and shows the backend's error (walletError) here.
     property bool awaiting: false
-    onSettingsChanged: {
-        if (!sheet.awaiting || sheet.mode === "change") return
+    property int attempt: 0
+    function answered(ok) {
         sheet.awaiting = false
-        if (sheet.backend && sheet.backend.walletError && sheet.backend.walletError.length > 0) return
-        sheet.clear(); sheet.closed()
+        if (ok) { sheet.clear(); sheet.closed() }
     }
 
     function submit() {
-        if (!sheet.canSubmit) return
+        if (!sheet.canSubmit || sheet.awaiting) return
         sheet.awaiting = true
+        var mine = ++sheet.attempt
+        var done = function (ok) { if (mine === sheet.attempt) sheet.answered(!!ok) }
         if (sheet.mode === "add")
-            sheet.backend.createPassword(addName.text, addPw.text)
+            // The new password's id, or "" when it wasn't made.
+            logos.watch(sheet.backend.createPassword(addName.text, addPw.text), function (id) { done(id && id.length > 0) })
         else if (sheet.mode === "rename")
-            sheet.backend.renamePassword(sheet.pwId, renameName.text)
-        else if (sheet.mode === "change") {
-            // Close only once it worked; a wrong current password keeps the sheet open, its
-            // error shown here (walletError), with the typed passwords cleared to retype.
-            logos.watch(sheet.backend.changePassword(sheet.pwId, oldPw.text, newPw.text), function (ok) {
-                sheet.awaiting = false
-                if (ok) { sheet.clear(); sheet.closed() }
-                else { oldPw.text = ""; newPw.text = ""; newPw2.text = "" }
-            })
-        } else if (sheet.mode === "remove")
-            sheet.backend.removePassword(sheet.pwId)
+            logos.watch(sheet.backend.renamePassword(sheet.pwId, renameName.text), done)
+        else if (sheet.mode === "change")
+            logos.watch(sheet.backend.changePassword(sheet.pwId, oldPw.text, newPw.text), done)
+        else if (sheet.mode === "remove")
+            logos.watch(sheet.backend.removePassword(sheet.pwId), done)
     }
 
     ColumnLayout {
@@ -127,7 +124,7 @@ Rectangle {
             Component.onCompleted: textInput.passwordMaskDelay = 0
         }
         LogosTextField {
-            id: addPw2; visible: sheet.mode === "add"
+            id: addPw2; objectName: "passwordAddAgain"; visible: sheet.mode === "add"
             Layout.fillWidth: true; echoMode: TextInput.Password; placeholderText: "Password again"
             Component.onCompleted: textInput.passwordMaskDelay = 0
         }
@@ -150,7 +147,7 @@ Rectangle {
             Component.onCompleted: textInput.passwordMaskDelay = 0
         }
         LogosTextField {
-            id: newPw2; visible: sheet.mode === "change"
+            id: newPw2; objectName: "passwordNewAgain"; visible: sheet.mode === "change"
             Layout.fillWidth: true; echoMode: TextInput.Password; placeholderText: "New password again"
             Component.onCompleted: textInput.passwordMaskDelay = 0
         }
@@ -178,7 +175,7 @@ Rectangle {
                 objectName: "passwordSheetSubmit"
                 // When removal is blocked there is nothing to do but close, so hide the action.
                 visible: !sheet.blocked
-                enabled: sheet.canSubmit
+                enabled: sheet.canSubmit && !sheet.awaiting
                 variant: LogosButton.Variant.Primary
                 text: sheet.mode === "add" ? "Add password"
                     : sheet.mode === "rename" ? "Save"

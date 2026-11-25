@@ -47,7 +47,11 @@ Item {
     // ── wallets ─────────────────────────────────────────────────────────────
     // 0: the requests, 1: the wallets.
     property int page: 0
-    onPageChanged: if (tabs.currentIndex !== page) tabs.currentIndex = page
+    // Leaving the Passwords tab (a request or an unlock brings another tab up) closes its sheet.
+    onPageChanged: {
+        if (tabs.currentIndex !== page) tabs.currentIndex = page
+        if (page !== 2) root.pwMode = ""
+    }
     // The wallet the Unlock sheet is for, and the open that brought the person there, if any.
     property string unlockSeed: ""
     property string unlockOpen: ""
@@ -862,6 +866,7 @@ Item {
         pwName: root.pwName
         pwWallets: root.pwWallets
         onClosed: root.pwMode = ""
-        onVisibleChanged: if (visible) reset()
+        // Cleared both ways: opened fresh, and nothing typed left in hidden fields once closed.
+        onVisibleChanged: reset()
     }
 }

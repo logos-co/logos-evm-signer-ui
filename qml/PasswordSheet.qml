@@ -3,6 +3,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import Logos.Controls
 import Logos.Theme
+import "errors.js" as Errors
 
 // Add, rename, change or remove a vault password, in a sheet over the Passwords tab. Matches the
 // unlock and rule sheets: a title, a one-line explanation, the inputs, then Cancel and a primary
@@ -56,7 +57,7 @@ Rectangle {
     // Called by the host whenever the sheet shows or hides: it never reopens pre-filled, and what
     // was typed doesn't stay behind in hidden fields once it closes. An answer still on its way
     // for the sheet as it was is ignored.
-    function reset() { awaiting = false; attempt++; clear() }
+    function reset() { awaiting = false; attempt++; error = ""; clear() }
 
     readonly property bool canSubmit:
           mode === "add"    ? (addName.text.trim().length > 0 && addPw.text.length >= 8 && addPw.text === addPw2.text)
@@ -65,29 +66,56 @@ Rectangle {
         : mode === "remove" ? (pwWallets === 0)
         : false
 
+    // Why the primary action is still off, once something is typed: the rules are otherwise
+    // only in the description, and a button that stays grey says nothing.
+    readonly property string hint: {
+        if (mode === "add") {
+            if (addPw.text.length > 0 && addPw.text.length < 8) return "At least 8 characters."
+            if (addPw2.text.length > 0 && addPw2.text !== addPw.text) return "The two passwords don't match."
+            if (addPw.text.length > 0 && addName.text.trim().length === 0) return "Give it a name."
+        } else if (mode === "rename") {
+            if (renameName.text.trim().length === 0) return "Give it a name."
+        } else if (mode === "change") {
+            if (newPw.text.length > 0 && newPw.text.length < 8) return "At least 8 characters."
+            if (newPw2.text.length > 0 && newPw2.text !== newPw.text) return "The two new passwords don't match."
+            if (newPw.text.length > 0 && oldPw.text.length === 0) return "Type the current password too."
+        }
+        return ""
+    }
+
     // Every action waits for the backend's own answer. Only a success clears the fields and closes
-    // the sheet; a failure keeps what was typed and shows the backend's error (walletError) here.
+    // the sheet; a failure keeps what was typed and shows why here: the backend's walletError, read
+    // as this sheet's own call answers, never the live property other views share.
     property bool awaiting: false
     property int attempt: 0
+    property string error: ""
     function answered(ok) {
         sheet.awaiting = false
         if (ok) { sheet.clear(); sheet.closed() }
+        else sheet.error = Errors.human(sheet.backend ? sheet.backend.walletError : "") || "That did not work. Try again."
     }
 
     function submit() {
         if (!sheet.canSubmit || sheet.awaiting) return
         sheet.awaiting = true
+        sheet.error = ""
         var mine = ++sheet.attempt
         var done = function (ok) { if (mine === sheet.attempt) sheet.answered(!!ok) }
+        // The call itself failed (no answer from the backend): the sheet is usable again.
+        var lost = function () {
+            if (mine !== sheet.attempt) return
+            sheet.awaiting = false
+            sheet.error = "The Signer did not answer. Try again."
+        }
         if (sheet.mode === "add")
             // The new password's id, or "" when it wasn't made.
-            logos.watch(sheet.backend.createPassword(addName.text, addPw.text), function (id) { done(id && id.length > 0) })
+            logos.watch(sheet.backend.createPassword(addName.text, addPw.text), function (id) { done(id && id.length > 0) }, lost)
         else if (sheet.mode === "rename")
-            logos.watch(sheet.backend.renamePassword(sheet.pwId, renameName.text), done)
+            logos.watch(sheet.backend.renamePassword(sheet.pwId, renameName.text), done, lost)
         else if (sheet.mode === "change")
-            logos.watch(sheet.backend.changePassword(sheet.pwId, oldPw.text, newPw.text), done)
+            logos.watch(sheet.backend.changePassword(sheet.pwId, oldPw.text, newPw.text), done, lost)
         else if (sheet.mode === "remove")
-            logos.watch(sheet.backend.removePassword(sheet.pwId), done)
+            logos.watch(sheet.backend.removePassword(sheet.pwId), done, lost)
     }
 
     ColumnLayout {
@@ -153,10 +181,19 @@ Rectangle {
         }
 
         LogosText {
-            objectName: "passwordSheetError"
-            visible: !!(sheet.backend && sheet.backend.walletError)
+            objectName: "passwordSheetHint"
+            visible: sheet.hint !== ""
             Layout.fillWidth: true
-            text: (sheet.backend && sheet.backend.walletError) || ""
+            text: sheet.hint
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+            color: Theme.palette.textSecondary
+        }
+        LogosText {
+            objectName: "passwordSheetError"
+            visible: sheet.error !== ""
+            Layout.fillWidth: true
+            text: sheet.error
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             color: Theme.palette.error
@@ -168,7 +205,7 @@ Rectangle {
             LogosButton {
                 objectName: "passwordSheetCancel"
                 text: sheet.blocked ? "Close" : "Cancel"
-                onClicked: { sheet.clear(); sheet.closed() }
+                onClicked: { sheet.reset(); sheet.closed() }
             }
             Item { Layout.fillWidth: true }
             LogosButton {

@@ -298,9 +298,12 @@ sections:
           qt_mcp: "result-mcp"
           launch_timeout: 600
           tests:
-            - name: "The signer UI connects to its backend"
+            - name: "The signer view is up"
+              # The header's subtitle: the view compiled and is on screen. There is no
+              # Refresh button any more (the view follows the backend on its own); the
+              # backend connecting is what the next step proves, by a request claimed.
               action: wait_for
-              texts: ["Refresh"]
+              texts: ["Signing requests and wallets"]
               timeout: 20000
 
             - name: "The manager parks the request and the UI claims it"
@@ -442,7 +445,8 @@ sections:
 
             - name: "The queue is empty again"
               action: wait_for
-              texts: ["No signing requests are waiting."]
+              # The Requests tab's empty state, its title matched whole.
+              texts: ["No signing requests"]
               # approve() now drops the request from the queue in the same call
               # stack that records the outcome, so this is immediate rather than
               # waiting on the next poll. It no longer needs a poll-sized budget.
@@ -550,7 +554,7 @@ sections:
 
             - name: "The queue is empty after the unlocked send"
               action: wait_for
-              texts: ["No signing requests are waiting."]
+              texts: ["No signing requests"]
               timeout: 20000
 
             - name: "A device's request: the device asks the person itself"
@@ -824,7 +828,7 @@ sections:
               # compiled under Basecamp's sandbox -- which is the whole of what
               # this section claims.
               action: wait_for
-              texts: ["No signing requests are waiting."]
+              texts: ["No signing requests"]
               timeout: 45000
               screenshot: "evm-signer-ui-basecamp.png"
 

@@ -217,11 +217,12 @@ Item {
     readonly property var queue: {
         try { return JSON.parse(backend ? backend.pendingJson : "[]") } catch (e) { return [] }
     }
-    // Any wallet currently unlocked — gates the header's "Lock all".
-    readonly property bool anyUnlocked: {
+    // Any wallet unlocked that a lock would close — gates the header's "Lock all". An always-unlocked
+    // wallet (no secret to its rule) stays open whatever is locked, so it doesn't arm the button.
+    readonly property bool anyLockable: {
         if (!ready || backend === null) return false
         var ws = root.parsed(backend.walletsJson, ({})).wallets || []
-        return ws.some(function (w) { return w.locked === false })
+        return ws.some(function (w) { return w.locked === false && !w.alwaysUnlocked })
     }
     readonly property bool showing: ready && backend.renderedHandle !== ""
     // No secret to type: an unlock covers this request, or its device asks the person itself.
@@ -384,7 +385,7 @@ Item {
             LogosButton {
                 objectName: "lockAllButton"
                 text: "Lock all"
-                enabled: root.ready && root.anyUnlocked
+                enabled: root.ready && root.anyLockable
                 onClicked: root.backend.lockWallets("[]")
             }
         }

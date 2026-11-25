@@ -143,10 +143,12 @@ Rectangle {
                     onClicked: { sheet.wayIndex = index; inputs.clear() }
                 }
             }
-            // One way in: name it only when there's no device/keystore factor — a device factor is
-            // already spelled out by the holder row below (StepInputs), so naming it here repeats it.
+            // One way in: named unless it is the device alone, which the holder row below
+            // (StepInputs) already spells out. A way that also takes a password names it here, so
+            // the password's name stays on screen once its field is typed into.
             LogosText {
-                visible: sheet.ways.length === 1 && !sheet.takesDevice
+                objectName: "unlockWayLine"
+                visible: sheet.ways.length === 1 && (!sheet.takesDevice || sheet.wayPasswords.length > 0)
                 Layout.fillWidth: true
                 text: sheet.way ? "Unlocks with " + sheet.wayText(sheet.way) + "." : ""
                 textFormat: Text.PlainText

@@ -41,7 +41,8 @@ LogosComboBox {
     bottomPadding: 6
     displayText: currentEntry ? Roster.summary(currentEntry) : placeholder
     Accessible.name: displayText
-    LogosToolTip { text: picker.displayText; visible: picker.hovered && picker.currentEntry !== null }
+    ToolTip.visible: hovered && currentEntry !== null
+    ToolTip.text: displayText
 
     contentItem: AccountIdentity {
         entry: picker.currentEntry

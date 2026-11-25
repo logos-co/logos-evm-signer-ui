@@ -14,7 +14,9 @@ Frame {
     property string title: ""
     // The wallet's id, shown once it is a known wallet: its BIP32 master fingerprint. Empty until
     // accounts are added, so the Wallet ID row only appears for a known wallet.
-    property string walletId: ""
+    property string walletId: fingerprint
+    // The name this property had before; an app that still sets it gets the same row.
+    property string fingerprint: ""
     // The keyUid this wallet is recognized by, shown in the Wallet ID tooltip.
     property string walletIdFull: ""
     // Icons for the inline edit (rename) and trash (forget) controls beside the title.
@@ -53,10 +55,17 @@ Frame {
     // Add accounts becomes a full-width button under the connection; rename/forget become the edit
     // and trash icons beside the name; anything else (e.g. Verify) stays in the top row.
     readonly property var allActions: Roster.actions(card.actions)
-    readonly property var addAction: allActions.filter(function (a) { return a.id === "add" })[0] || null
-    readonly property var editAction: allActions.filter(function (a) { return a.id === "rename" })[0] || null
-    readonly property var trashAction: allActions.filter(function (a) { return a.id === "forget" })[0] || null
-    readonly property var otherActions: allActions.filter(function (a) { return ["add", "rename", "forget"].indexOf(a.id) < 0 })
+    // Opt-in, as the icons are: with `primaryAdd` the `add` action is the card's full-width primary
+    // button; without it, it stays a text button with the others. Its object name is
+    // `<prefix>Action_add` either way, so specs that click it keep working.
+    property bool primaryAdd: false
+    // Renaming doesn't need the keys: the Signer keeps the pencil on a locked wallet.
+    property bool editWhileLocked: false
+    readonly property var addAction: primaryAdd ? allActions.filter(function (a) { return a.id === "add" })[0] || null : null
+    // Rename and forget become icons by the title only when the app passes the icons.
+    readonly property var editAction: editIcon.toString() ? allActions.filter(function (a) { return a.id === "rename" })[0] || null : null
+    readonly property var trashAction: trashIcon.toString() ? allActions.filter(function (a) { return a.id === "forget" || a.id === "removewallet" })[0] || null : null
+    readonly property var otherActions: allActions.filter(function (a) { return a !== card.addAction && a !== card.editAction && a !== card.trashAction })
 
     objectName: namePrefix + "Card"
     padding: Theme.spacing.medium
@@ -110,11 +119,7 @@ Frame {
                     }
                     LogosIconButton {
                         objectName: card.namePrefix + "Edit"
-                        // Signer copy: the pencil stays available while locked, because the Signer's
-                        // public name is the one shown WHILE locked — you name a wallet to recognize
-                        // it before unlocking. (Keycard's copy hides it when locked; intentional
-                        // divergence until the shared kit gains an `editWhenLocked` flag.)
-                        visible: !!card.editAction
+                        visible: !!card.editAction && (!card.locked || card.editWhileLocked)
                         enabled: !card.editAction || card.editAction.enabled !== false
                         flat: true; size: 28; iconSize: 16
                         iconSource: card.editIcon
@@ -147,7 +152,7 @@ Frame {
                     // the short form the Signer/Keys and hardware wallets show, once accounts load.
                     HoverHandler { id: walletIdHover }
                     ToolTip {
-                        text: "The master fingerprint of the wallet's keys, the same ID the Signer and Keys apps show."
+                        text: "The master fingerprint of the wallet's keys, the same ID every Logos wallet app shows."
                             + (card.walletIdFull.length > 0 ? "\nkeyUid: " + card.walletIdFull : "")
                         visible: walletIdHover.hovered
                         delay: 400
@@ -177,16 +182,45 @@ Frame {
             }
             Repeater {
                 model: card.otherActions
-                delegate: ActionButton {
+                delegate: Item {
+                    id: oa
                     required property var modelData
-                    spec: modelData
+                    objectName: card.namePrefix + "Action_" + Roster.actionName(modelData)
+                    enabled: modelData.enabled
+                    // The button's click, for whatever holds the action by its object name.
+                    function clicked() { if (enabled) card.action(oa.modelData.id) }
                     Layout.alignment: Qt.AlignTop
-                    onClicked: card.action(spec.id)
+                    implicitWidth: modelData.icon ? 28 : oaText.implicitWidth
+                    implicitHeight: modelData.icon ? 28 : oaText.implicitHeight
+                    // An action with an icon is an icon button, its label the tooltip.
+                    LogosIconButton {
+                        visible: oa.modelData.icon.length > 0
+                        anchors.fill: parent
+                        flat: true; size: 28; iconSize: 16
+                        enabled: oa.modelData.enabled
+                        iconSource: oa.modelData.icon ? Qt.resolvedUrl(oa.modelData.icon) : ""
+                        iconColor: hovered ? Theme.palette.text : Theme.palette.textTertiary
+                        Accessible.name: oa.modelData.label.replace("…", "")
+                        onClicked: card.action(oa.modelData.id)
+                        LogosToolTip { text: oa.modelData.tip || oa.modelData.label.replace("…", ""); visible: parent.hovered; delay: 400 }
+                    }
+                    LogosButton {
+                        id: oaText
+                        visible: oa.modelData.icon.length === 0
+                        anchors.fill: parent
+                        text: oa.modelData.label
+                        enabled: oa.modelData.enabled
+                        Component.onCompleted: if ("compact" in this) this["compact"] = true
+                        onClicked: card.action(oa.modelData.id)
+                    }
                 }
             }
             LogosIconButton {
                 objectName: card.namePrefix + "Forget"
-                visible: !!card.trashAction && !card.locked
+                // Shown whenever a Forget action is offered, locked wallets included: a locked wallet
+                // whose card was reset or lost must be removable from the list. (The action itself is
+                // only offered for wallets committed on this computer.)
+                visible: !!card.trashAction
                 enabled: !card.trashAction || card.trashAction.enabled !== false
                 Layout.alignment: Qt.AlignTop
                 flat: true; size: 28; iconSize: 16
@@ -213,7 +247,9 @@ Frame {
                 // 44 px min, which otherwise inflated only the button rows). A wrapping strip (a
                 // multi-line warning) keeps its natural height.
                 readonly property bool wrapping: !!(modelData && modelData.warn)
-                implicitHeight: wrapping ? (stripRow.implicitHeight + 2 * Theme.spacing.small) : 40
+                // At least 40, and taller when its text wraps (a long reader name at a narrow width).
+                implicitHeight: wrapping ? (stripRow.implicitHeight + 2 * Theme.spacing.small)
+                                         : Math.max(40, stripRow.implicitHeight + 2 * Theme.spacing.small)
                 radius: 6
                 color: Theme.palette.backgroundSecondary
                 RowLayout {
@@ -273,7 +309,7 @@ Frame {
         }
 
         LogosButton {
-            objectName: card.namePrefix + "AddAccounts"
+            objectName: card.namePrefix + "Action_add"
             visible: !!card.addAction && !card.locked
             enabled: !card.addAction || card.addAction.enabled !== false
             Layout.fillWidth: true

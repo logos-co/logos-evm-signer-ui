@@ -60,14 +60,20 @@ Item {
                     objectName: identity.namePrefix + "Copy"
                     visible: identity.copyable && !identity.bitcoin
                     value: identity.entry ? Roster.text(identity.entry.address) : ""
+                    ToolTip.text: "Copy address"
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 400
                     onCopied: function (v) { identity.copied(v) }
-                    LogosToolTip { text: "Copy address"; visible: parent.hovered; delay: 400 }
                 }
-                LogosBadge {
+                // A tag in the Activity / Keycard style: bold text, no border.
+                LogosText {
                     objectName: identity.namePrefix + "Type"
                     visible: identity.bitcoin
                     text: Roster.scriptType(identity.entry)
+                    textFormat: Text.PlainText
                     color: Theme.palette.textSecondary
+                    font.weight: Theme.typography.weightBold
+                    font.pixelSize: Theme.typography.secondaryText
                 }
                 LogosText {
                     objectName: identity.namePrefix + "Account"

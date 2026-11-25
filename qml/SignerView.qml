@@ -426,6 +426,23 @@ Item {
                 Layout.fillHeight: true
                 spacing: 12
 
+                // ── what just happened ──────────────────────────────────────────────
+                // The backend's status, only when it says something the person waits for: an
+                // approval's outcome ("Approved — 3 items signed", held past the next poll), a
+                // device at work, or the manager out of reach. The routine "Ready", "Nothing to
+                // approve" and "N waiting" are left out: the tab's count and the queue say those.
+                LogosText {
+                    objectName: "signerStatus"
+                    readonly property string status: root.ready ? (backend.statusText || "") : ""
+                    visible: status !== "" && status !== "Ready" && status !== "Nothing to approve"
+                             && !/^[0-9]+ waiting$/.test(status)
+                    Layout.fillWidth: true
+                    text: status
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    font.bold: true
+                }
+
                 // ── the queue ───────────────────────────────────────────────────────
                 LogosText {
                     visible: !root.showing && root.queue.length > 0

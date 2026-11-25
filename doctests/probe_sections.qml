@@ -144,6 +144,20 @@ Item {
         }
     }
 
+    function assertTheOutcomeIsShownAndTheRoutineIsNot() {
+        console.log("")
+        console.log("the backend's status line shows what the person waits for (an approval's outcome,")
+        console.log("a device at work), and stays out of the way for the routine poll states")
+        var line = probe.find(view.item, "signerStatus")
+        var shown = function (t) { fake.statusText = t; return line.visible ? line.text : "(hidden)" }
+        check("an approval's outcome", shown("Approved — 3 items signed"), "Approved — 3 items signed")
+        check("a device at work", shown("Confirm on the signing device"), "Confirm on the signing device")
+        check("the manager out of reach", shown("Signer manager unreachable"), "Signer manager unreachable")
+        check("not Ready, Nothing to approve or N waiting",
+              [shown("Ready"), shown("Nothing to approve"), shown("2 waiting")].join(), "(hidden),(hidden),(hidden)")
+        fake.statusText = "Ready"
+    }
+
     function assertAllThreeSectionsAreOnScreen() {
         console.log("")
         console.log("a request is on screen. Three sections, in the order a human reads them:")
@@ -242,6 +256,7 @@ Item {
                 return
             item.ready = true
 
+            probe.assertTheOutcomeIsShownAndTheRoutineIsNot()
             probe.assertAllThreeSectionsAreOnScreen()
             probe.assertEachSectionCarriesItsOwnLines()
             probe.assertTheRequestersWordsStayOutOfWhatIsSigned()

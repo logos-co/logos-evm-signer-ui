@@ -47,8 +47,9 @@ sections:
   - title: "Build the pieces"
     step: true
     text: |
-      Four modules and a host. `signer_probe` is a doc-test fixture that lives
-      in this repo: something has to *ask* for a signature, and it has to be a
+      Four modules and a host: Basecamp in standalone mode, a dev build with the
+      QML inspector on, which opens exactly the apps it is given with `--module`.
+      `signer_probe` is a doc-test fixture that lives in this repo: something has to *ask* for a signature, and it has to be a
       named module, because the manager refuses the host anchor and therefore
       refuses the CLI. It also imports the key it later asks to sign with, which
       is account mutation — so it has to hold the keystore's custodian role too;
@@ -57,11 +58,11 @@ sections:
       - title: "The host and the test driver"
         run: |
           set -euo pipefail
-          nix build 'github:logos-co/logos-standalone-app' --no-write-lock-file -o result-app
+          nix build 'github:logos-co/logos-basecamp#app-standalone' --no-write-lock-file -o result-host
           nix build 'github:logos-co/logos-qt-mcp' --no-write-lock-file -o result-mcp
         code_block: |
           set -euo pipefail
-          nix build 'github:logos-co/logos-standalone-app' --no-write-lock-file -o result-app
+          nix build 'github:logos-co/logos-basecamp#app-standalone' --no-write-lock-file -o result-host
           nix build 'github:logos-co/logos-qt-mcp' --no-write-lock-file -o result-mcp
 
       # Its own step ON PURPOSE: the harness dispatches
@@ -70,7 +71,7 @@ sections:
       # five of these were dead, and the build steps were proving only
       # that nix exited 0, never that it produced anything.
       - title: "The runtime and driver really landed"
-        check_file: "result-app"
+        check_file: "result-host/bin/LogosBasecamp"
 
       # One build per step. A single step running four builds reports only the
       # LAST one's exit code, so three of them can fail while the step goes
@@ -122,6 +123,17 @@ sections:
       - title: "The probe really produced a module"
         check_file: "result-probe/modules"
 
+      - title: "Build the requesting app"
+        text: |
+          Basecamp has no `--load`: it loads what an opened app declares. So the
+          probe comes in the way a wallet's backend does, as the one dependency of
+          `signer_probe_app`, a doc-test app opened beside the signer.
+        run: "nix build 'github:logos-co/logos-evm-signer-ui{release}?dir=doctests/requester-app#install' --no-write-lock-file -o result-probe-app"
+        code_block: "nix build 'github:logos-co/logos-evm-signer-ui?dir=doctests/requester-app#install' --no-write-lock-file -o result-probe-app"
+
+      - title: "The requesting app really produced a plugin"
+        check_file: "result-probe-app/plugins"
+
       - title: "Build the mock device"
         text: |
           A doc-test fixture beside the signer manager: a signer behind the same interface that
@@ -145,60 +157,43 @@ sections:
       - title: "The token list really produced modules"
         check_file: "result-tokenlist/modules"
 
-      - title: "Build capability_module"
+      - title: "Lay out the dependencies"
         text: |
-          Not bundled with the standalone host. Without it every token handshake
-          times out and every call is refused, so it is staged explicitly rather
-          than assumed.
-        run: "nix build 'github:logos-co/logos-capability-module#install' --no-write-lock-file -o result-capability"
-        code_block: "nix build 'github:logos-co/logos-capability-module#install' --no-write-lock-file -o result-capability"
-
-      # Its own step ON PURPOSE: the harness dispatches
-      #   if file / elif run / elif ui_test / elif check_file
-      # so a check_file sharing a step with run: is NEVER evaluated. All
-      # five of these were dead, and the build steps were proving only
-      # that nix exited 0, never that it produced anything.
-      - title: "capability_module really produced modules"
-        check_file: "result-capability/modules"
-
-      - title: "Lay them out for the host"
-        text: |
-          `capability_module` is not bundled with the standalone host, and without
-          it every token handshake times out and calls are refused — so it is
-          staged alongside the others rather than assumed.
+          The two apps are opened from their own install roots with `--module`;
+          everything they depend on goes in one directory for `--modules-dir`.
+          `capability_module`, `package_manager` and `modules_state` are bundled
+          with the host and are not staged.
         run: |
           set -euo pipefail
-          mkdir -p tree/modules tree/plugins
+          mkdir -p tree/modules
           cp -r result-keystore/modules/*   tree/modules/
           cp -r result-manager/modules/*    tree/modules/
           cp -r result-probe/modules/*      tree/modules/
           cp -r result-device/modules/*     tree/modules/
-          cp -r result-capability/modules/* tree/modules/
           cp -r result-tokenlist/modules/*  tree/modules/
-          cp -r result-signer/plugins/*     tree/plugins/
           chmod -R u+w tree
-          ls tree/modules tree/plugins
+          ls tree/modules result-signer/plugins result-probe-app/plugins
         code_block: |
-          mkdir -p tree/modules tree/plugins
+          mkdir -p tree/modules
           cp -r result-keystore/modules/*   tree/modules/
           cp -r result-manager/modules/*    tree/modules/
           cp -r result-probe/modules/*      tree/modules/
           cp -r result-device/modules/*     tree/modules/
-          cp -r result-capability/modules/* tree/modules/
           cp -r result-tokenlist/modules/*  tree/modules/
-          cp -r result-signer/plugins/*     tree/plugins/
         expect_contains:
           - "keystore_module"
           - "signer_manager_module"
           - "signer_probe"
           - "mock_device_signer"
           - "evm_signer_ui"
+          - "signer_probe_app"
 
   - title: "Run it and approve a signature"
     step: true
     text: |
-      The host loads the requester with `--load` and shows the signer UI. Two
-      environment variables matter and are not optional:
+      Basecamp opens the signer UI and `signer_probe_app`, each from its install
+      root with `--module`, and loads the probe as the app's dependency from
+      `--modules-dir`. Two environment variables matter and are not optional:
 
       - `QT_FORCE_STDERR_LOGGING=1` — otherwise Qt routes the app's own
         diagnostics to journald and a failure prints **nothing at all**.
@@ -246,9 +241,8 @@ sections:
           accounts exist, and never imports a key.
 
           The calls come from the module rather than a command line because
-          `logos-standalone-app` has no CLI — and the host anchor a CLI
-          authenticates as is refused by the manager regardless, which is why
-          `signer_probe` exists at all. They take effect on the next call;
+          the host anchor a CLI authenticates as is refused by the manager,
+          which is why `signer_probe` exists at all. They take effect on the next call;
           nothing is reloaded.
 
       - title: "Launch, approve, and collect the signature"
@@ -294,7 +288,7 @@ sections:
               }]
               (directory / "custom_tokens.json").write_text(json.dumps(tokens))
               PY
-          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 ./result-app/bin/logos-standalone-app -p ./tree/plugins/evm_signer_ui -m ./tree/modules --load signer_probe -u ./userdir"
+          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 ./result-host/bin/LogosBasecamp --module ./result-signer --module ./result-probe-app --modules-dir ./tree/modules --user-dir ./userdir"
           qt_mcp: "result-mcp"
           launch_timeout: 600
           tests:
@@ -692,23 +686,19 @@ sections:
   - title: "The same plugin inside Basecamp"
     step: true
     text: |
-      The section above runs the signer in `logos-standalone-app`, which is what
-      makes the flow drivable: the QML inspector attaches to exactly **one**
-      QQuickWidget, and Basecamp gives every `ui_qml` plugin its own. Once a
-      plugin is open there, the shell — and therefore any second app — is
-      invisible to the driver, so the two-app version of this flow (a wallet
-      asking, the signer approving) cannot be driven end-to-end today. That is a
-      limitation of the test driver, not of the plugin.
+      The section above runs the signer in Basecamp's standalone mode: a dev
+      build that opens only the apps passed with `--module`, from their install
+      roots, beside a fixture app whose backend does the asking.
 
-      What Basecamp *does* add is the real shell: the QML sandbox, the shared
-      `Logos.*` module resolution, and the portable variant contract. So this
+      What the installed Basecamp adds is the real shell: plugins installed into
+      the user directory, the sidebar, and the portable variant contract. So this
       section asserts exactly that much — the plugin installs, loads, and renders
       there — and nothing it cannot honestly show.
     steps:
       - title: "Build Basecamp and the portable variants"
         text: |
-          Basecamp takes **portable** packages (`linux-amd64`); the standalone
-          host takes **dev** ones (`linux-amd64-dev`). Installing the wrong
+          This Basecamp takes **portable** packages (`linux-amd64`); the dev
+          build above takes **dev** ones (`linux-amd64-dev`). Installing the wrong
           variant is not an error — the module is silently skipped with a
           "not supported on this platform" warning and simply never loads.
         run: |
@@ -753,7 +743,7 @@ sections:
           # then only fail.
           #
           # The real hazard is the previous app. The harness kills its process
-          # group and waits 10s; a lingering standalone-app or ui-host can still
+          # group and waits 10s; a lingering Basecamp or ui-host can still
           # hold 3768, in which case Basecamp fails to listen and the driver
           # attaches to the LEFTOVER SIGNER UI -- which has no shell text. That
           # surfaces as `Expected texts not found: ["Workspace"]` and reads

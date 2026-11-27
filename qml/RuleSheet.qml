@@ -146,21 +146,22 @@ Rectangle {
         sheet.error = ""
         var mine = ++sheet.attempt
         // A refusal names why in walletError as the call answers; it is read then, and only here.
+        // What was typed is cleared once the change is made, so a refused one can be tried again.
         var answered = function (ok) {
-            if (mine === sheet.attempt && !ok) sheet.error = Errors.human(be.walletError) || "That did not work. Try again."
+            if (mine !== sheet.attempt) return
+            if (ok) inputs.clear()
+            else sheet.error = Errors.human(be.walletError) || "That did not work. Try again."
         }
         var lost = function () { if (mine === sheet.attempt) sheet.error = "The Signer did not answer. Try again." }
         if (mode === "keys") {
             logos.watch(be.changeKeys(seed, sheet.offersNewUnlockKey && nextIndex.checked, sheet.newDeviceWay ? holder : "", secret, inputs.passwordsJson()),
                         answered, lost)
-            inputs.clear()
             return
         }
         var run = function (pid, typed) {
             logos.watch(be.setRule(seed, JSON.stringify(sheet.waysFor(sheet.current.key, pid)),
                                    sheet.newDeviceWay ? holder : "", secret, typed),
                         answered, lost)
-            inputs.clear()
         }
         if (needsPassword && chosenPassword === "new") {
             var name = newName.text.trim(), pw = newPassword.text

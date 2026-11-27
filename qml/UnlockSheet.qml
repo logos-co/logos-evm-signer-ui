@@ -128,8 +128,8 @@ Rectangle {
         LogosText {
             Layout.fillWidth: true
             text: sheet.unlocked
-                  ? "This wallet's accounts are available to apps. You still approve each request. It stays unlocked until you lock it or quit."
-                  : "Makes this wallet's accounts available so apps can ask to use it. You still approve each request. It stays unlocked until you lock it or quit."
+                  ? "This wallet's accounts are available to apps. Each request needs your approval unless you've given that app an allowance. It stays unlocked until you lock it or quit."
+                  : "Makes this wallet's accounts available so apps can ask to use it. Each request needs your approval unless you've given that app an allowance. It stays unlocked until you lock it or quit."
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             color: Theme.palette.textSecondary

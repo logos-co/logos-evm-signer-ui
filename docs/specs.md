@@ -199,7 +199,8 @@ lives in `WalletsView.qml` and the card's properties, never in the vendored fold
   offer to rename or remove.
 
 - **The Unlock sheet** is titled with the wallet's name and says what unlocking does: the
-  accounts become available for apps to ask for, and each request is still approved here. It
+  accounts become available for apps to ask for, and each request needs the person's approval
+  unless they've given that app an allowance. It
   offers the wallet's ways in and asks for what the chosen one takes:
   - which holder to ask when it takes the device;
   - the card's PIN, or the keystore's password;

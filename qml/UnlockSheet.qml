@@ -3,6 +3,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import Logos.Controls
 import Logos.Theme
+import "errors.js" as Errors
 
 // Unlocking one wallet, once, for every app. It offers the wallet's ways in and asks for what the
 // chosen one takes. When an app asked to open the wallet, that request is shown here beside it,
@@ -41,16 +42,36 @@ Rectangle {
     readonly property bool mine: step.seed === seed
     readonly property bool working: mine && step.state === "device"
     readonly property bool retyping: mine && step.state === "needs_password"
-    readonly property bool failed: mine && step.state === "failed"
+    readonly property bool failed: tried && mine && step.state === "failed"
     readonly property bool unlocked: wallet !== null && wallet.locked === false
     readonly property var open: {
         var o = parse(backend ? backend.openJson : "{}", ({}))
         return o.handle && o.handle === openHandle ? o : null
     }
 
+    // What went wrong with this sheet's own unlock, as it answered: never the backend's live
+    // walletError, which other views share. Cleared whenever the sheet opens, closes, moves to
+    // another wallet or tries again, so nothing from an earlier attempt or another view shows.
+    property string error: ""
+    // An unlock was started from this opening of the sheet: only then is a failed step its own.
+    property bool tried: false
+    property int attempt: 0
+    function reset() { error = ""; tried = false; attempt++; inputs.clear(); retype.clear() }
+    onVisibleChanged: reset()
+    onUnlockedChanged: if (unlocked) error = ""
+    // Ask the backend, and keep its refusal here as this sheet's own error.
+    function ask(reply, fallback) {
+        var backend = sheet.backend
+        sheet.error = ""
+        var mine = ++sheet.attempt
+        logos.watch(reply,
+                    function (ok) { if (mine === sheet.attempt && !ok) sheet.error = Errors.human(backend.walletError) || fallback },
+                    function () { if (mine === sheet.attempt) sheet.error = "The Signer did not answer. Try again." })
+    }
+
     property int wayIndex: 0
-    onSeedChanged: { wayIndex = 0; inputs.clear() }
-    onOpenHandleChanged: if (openHandle !== "" && backend) backend.showOpen(openHandle)
+    onSeedChanged: { wayIndex = 0; reset() }
+    onOpenHandleChanged: if (openHandle !== "" && backend) ask(backend.showOpen(openHandle), "Could not show that request.")
     readonly property var ways: wallet ? wallet.ways || [] : []
     readonly property var way: ways.length > wayIndex ? ways[wayIndex] : null
     readonly property bool takesDevice: way !== null && way.factors.some(function (f) { return f.kind === "device" })
@@ -94,7 +115,8 @@ Rectangle {
             text: (sheet.unlocked ? "Unlocked: " : "Unlock ") + sheet.title
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
-            font.bold: true
+            font.pixelSize: Theme.typography.panelTitleText
+            font.weight: Theme.typography.weightBold
         }
         LogosText {
             objectName: "unlockAfter"
@@ -106,8 +128,8 @@ Rectangle {
         LogosText {
             Layout.fillWidth: true
             text: sheet.unlocked
-                  ? "Every app can use this wallet until you lock it or quit."
-                  : "Unlocking it here unlocks it for every app until you lock it or quit."
+                  ? "This wallet's accounts are available to apps. Each request needs your approval unless you've given that app an allowance. It stays unlocked until you lock it or quit."
+                  : "Makes this wallet's accounts available so apps can ask to use it. Each request needs your approval unless you've given that app an allowance. It stays unlocked until you lock it or quit."
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             color: Theme.palette.textSecondary
@@ -142,8 +164,12 @@ Rectangle {
                     onClicked: { sheet.wayIndex = index; inputs.clear() }
                 }
             }
+            // One way in: named unless it is the device alone, which the holder row below
+            // (StepInputs) already spells out. A way that also takes a password names it here, so
+            // the password's name stays on screen once its field is typed into.
             LogosText {
-                visible: sheet.ways.length === 1
+                objectName: "unlockWayLine"
+                visible: sheet.ways.length === 1 && (!sheet.takesDevice || sheet.wayPasswords.length > 0)
                 Layout.fillWidth: true
                 text: sheet.way ? "Unlocks with " + sheet.wayText(sheet.way) + "." : ""
                 textFormat: Text.PlainText
@@ -178,7 +204,8 @@ Rectangle {
             objectName: "unlockRetype"
             visible: sheet.retyping
             Layout.fillWidth: true
-            text: (sheet.step.error || "A password is not correct.") + " The device has answered: type the password again."
+            text: (Errors.human(sheet.step.error) || "A password is not correct.").replace(/([^.!?])$/, "$1.")
+                  + " The device has answered: type the password again."
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             color: Theme.palette.error
@@ -196,16 +223,16 @@ Rectangle {
             objectName: "unlockFailed"
             visible: sheet.failed && !sheet.unlocked
             Layout.fillWidth: true
-            text: sheet.step.error || "The wallet was not unlocked."
+            text: Errors.human(sheet.step.error) || "The wallet was not unlocked."
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             color: Theme.palette.error
         }
         LogosText {
             objectName: "unlockError"
-            visible: !!(sheet.backend && sheet.backend.walletError)
+            visible: sheet.error !== ""
             Layout.fillWidth: true
-            text: (sheet.backend && sheet.backend.walletError) || ""
+            text: sheet.error
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             color: Theme.palette.error
@@ -247,14 +274,14 @@ Rectangle {
                 LogosButton {
                     objectName: "unlockOpenRefuse"
                     text: "Refuse"
-                    onClicked: sheet.backend.rejectOpen(sheet.open.handle)
+                    onClicked: sheet.ask(sheet.backend.rejectOpen(sheet.open.handle), "Could not refuse it.")
                 }
                 Item { Layout.fillWidth: true }
                 LogosButton {
                     objectName: "unlockOpenConsent"
                     enabled: sheet.unlocked
                     text: "Open it for that app"
-                    onClicked: sheet.backend.consentOpen(sheet.open.handle, sheet.open.bundle_id, "")
+                    onClicked: sheet.ask(sheet.backend.consentOpen(sheet.open.handle, sheet.open.bundle_id, ""), "Could not open it for that app.")
                 }
             }
         }
@@ -290,18 +317,30 @@ Rectangle {
                 objectName: "unlockRetry"
                 visible: sheet.retyping
                 enabled: retype.complete
+                variant: LogosButton.Variant.Primary
                 text: "Try again"
-                onClicked: { sheet.backend.retryUnlock(retype.passwordsJson()); retype.clear() }
+                onClicked: {
+                    // A wrong password comes back in the step itself (unlockRetype above).
+                    sheet.error = ""
+                    var mine = ++sheet.attempt
+                    logos.watch(sheet.backend.retryUnlock(retype.passwordsJson()), function () {},
+                                function () { if (mine === sheet.attempt) sheet.error = "The Signer did not answer. Try again." })
+                    retype.clear()
+                }
             }
             LogosButton {
                 objectName: "unlockButton"
                 visible: !sheet.unlocked && !sheet.working && !sheet.retyping && sheet.way !== null
                 enabled: inputs.complete
+                variant: LogosButton.Variant.Primary
                 text: sheet.takesDevice && inputs.asks === "" ? "Unlock with the device" : "Unlock"
                 onClicked: {
                     var holder = sheet.takesDevice && inputs.holder ? inputs.holder.signer : ""
-                    sheet.backend.unlockWallet(sheet.seed, sheet.way.id, holder,
-                                               sheet.takesDevice ? inputs.secret : "", inputs.passwordsJson())
+                    sheet.tried = true
+                    // Its own answer, read as it comes: a refusal names why in walletError then.
+                    sheet.ask(sheet.backend.unlockWallet(sheet.seed, sheet.way.id, holder,
+                                                         sheet.takesDevice ? inputs.secret : "", inputs.passwordsJson()),
+                              "The wallet was not unlocked.")
                     inputs.clear()
                 }
             }

@@ -2,6 +2,8 @@
 // signer manager: what each wallet says, what unlocking asks for by its rule and holder, a
 // password typed again after the device answered, an app's open shown beside its wallet, a rule
 // change with a new password, and the `wallets.unlock` intent ending once the wallet unlocks.
+// The Signer is read-only about the wallets themselves: renaming and removing happen in the app
+// that holds each one, and the card says which.
 import QtQuick
 
 Item {
@@ -55,7 +57,12 @@ Item {
         signal viewModuleReadyChanged(string moduleName, bool isReady)
         function module(n) { return fake }
         function isViewModuleReady(n) { return true }
-        function watch(value, cb) { if (cb) cb(value) }
+        // `lose` makes the next call fail as a lost QtRO call would: the error callback, not the answer.
+        property bool lose: false
+        function watch(value, cb, err) {
+            if (shell.lose) { shell.lose = false; if (err) err("call failed"); return }
+            if (cb) cb(value)
+        }
         function request(intent, params, cb) {}
         function respond(requestId, ok, data, error) {
             var r = probe.responses
@@ -131,13 +138,21 @@ Item {
         function refreshWallets() {}
         function acknowledge(handle) { return false }
         function dismiss() {}
+        // A password typed as "wrongpw" is refused, as the manager words it, code and all.
         function unlockWallet(seed, way, holder, secret, passwords) {
             fake.record("unlockWallet", [seed, way, holder, secret, passwords])
-            return true
+            var wrong = passwords.indexOf("wrongpw") >= 0
+            fake.walletError = wrong ? "WrongSecret: the password for this account is not correct" : ""
+            return !wrong
         }
         function retryUnlock(passwords) { fake.record("retryUnlock", [passwords]); return true }
         function cancelUnlock() { fake.record("cancelUnlock", []); fake.unlockJson = "{}"; return true }
-        function lockWallets(seeds) { fake.record("lockWallets", [seeds]); return true }
+        property bool failLock: false
+        function lockWallets(seeds) {
+            fake.record("lockWallets", [seeds])
+            fake.walletError = fake.failLock ? "Could not lock." : ""
+            return !fake.failLock
+        }
         function setRule(seed, ways, holder, secret, passwords) {
             fake.record("setRule", [seed, ways, holder, secret, passwords])
             return true
@@ -147,10 +162,23 @@ Item {
             return true
         }
         function setNames(seed, name, privateName) { fake.record("setNames", [seed, name, privateName]); return true }
-        function createPassword(name, password) { fake.record("createPassword", [name, password]); return "p_new" }
-        function renamePassword(id, name) { return true }
-        function changePassword(id, o, n) { return true }
-        function removePassword(id) { return true }
+        function createPassword(name, password) {
+            fake.record("createPassword", [name, password])
+            fake.walletError = name === "Taken" ? "A password named “Taken” already exists." : ""
+            return name === "Taken" ? "" : "p_new"
+        }
+        // A password named "Taken", or a wrong current password, fails as the manager would.
+        function renamePassword(id, name) {
+            fake.record("renamePassword", [id, name])
+            fake.walletError = name === "Taken" ? "A password named “Taken” already exists." : ""
+            return name !== "Taken"
+        }
+        function changePassword(id, o, n) {
+            fake.record("changePassword", [id, o, n])
+            fake.walletError = o === "wrong" ? "The current password is not correct." : ""
+            return o !== "wrong"
+        }
+        function removePassword(id) { fake.record("removePassword", [id]); return true }
         function showOpen(handle) {
             fake.record("showOpen", [handle])
             fake.openJson = JSON.stringify({ handle: handle, bundle_id: "bundle_open", requester: "bitcoin_wallet_core_module",
@@ -196,6 +224,12 @@ Item {
         check("locked: no Wallet ID, no accounts", probe.visibleAll("walletWalletId").length + probe.visibleAll("walletAccount_0").length, 0)
         check("...and Unlock… on each", probe.visibleAll("walletAction_unlock").length, 2)
         check("nothing to lock yet", probe.find(view.item, "lockAllButton").enabled, false)
+        var owners = probe.findAll(view.item, "walletLine_1").map(function (t) { return t.text })
+        check("each says where it is renamed or removed", JSON.stringify(owners),
+              JSON.stringify(["Rename or remove it in the Keycard app.", "Rename or remove it in QR Wallets."]))
+        check("...and offers no rename or remove here",
+              ["Edit", "Forget", "Action_rename", "Action_names", "Action_forget"].map(function (a) {
+                  return probe.visibleAll("wallet" + a).length }).join(), "0,0,0,0,0")
     }
 
     function assertAnUnlockedWalletShowsItsIdAndAccounts() {
@@ -216,13 +250,21 @@ Item {
         check("Ethereum first", probe.visibleAll("walletAccount_0_Name")[0].text + " " + probe.visibleAll("walletAccount_0_Path")[0].text,
               "Savings m/44'/60'/0'/0/0")
         check("...its address", probe.visibleAll("walletAccount_0_Address")[0].text, "0x9858…da94")
-        check("then Bitcoin, unnamed, with its number", probe.visibleAll("walletAccount_1_Name")[0].text + " · " + probe.visibleAll("walletAccount_1_Id")[0].text,
-              "Bitcoin · account 0")
+        // The account number isn't a separate label: the name carries it, and the path below.
+        check("then Bitcoin, unnamed, named with its number", probe.visibleAll("walletAccount_1_Name")[0].text, "Bitcoin 0")
+        check("...its script type and network as tags",
+              [0, 1].map(function (i) { return probe.visibleAll("walletAccount_1_Badge_" + i)[0].text }).join(" · "),
+              "Native SegWit · Test networks")
         check("...its first receiving address", probe.visibleAll("walletAccount_1_AddressLabel")[0].text + " " + probe.visibleAll("walletAccount_1_Address")[0].text,
-              "First receiving address (testnet/signet, 0/0) tb1q6r…pvkl")
+              "First address tb1q6r…pvkl")
         check("the locked wallet's accounts stay hidden", probe.visibleAll("walletAccount_2").length, 0)
-        check("Lock, Names…, Rule… and New keys… once unlocked",
-              ["lock", "names", "rule", "keys"].map(function (a) { return probe.visibleAll("walletAction_" + a).length }).join(), "1,2,1,1")
+        check("Lock, Rule… and New keys… once unlocked",
+              ["lock", "rule", "keys"].map(function (a) { return probe.visibleAll("walletAction_" + a).length }).join(), "1,1,1")
+        check("...and still no rename, edit or remove on the card or its rows",
+              ["walletEdit", "walletForget", "walletAction_rename", "walletAccount_0_Edit", "walletAccount_0_Remove",
+               "walletAccount_1_Edit", "walletAccount_1_Remove"].map(function (a) { return probe.visibleAll(a).length }).join(),
+              "0,0,0,0,0,0,0")
+        check("the unlocked wallet's Lock all is armed", probe.find(view.item, "lockAllButton").enabled, true)
         probe.click("walletAction_lock")
         check("Lock locks this one", JSON.stringify(fake.last("lockWallets")), JSON.stringify([JSON.stringify(["s_card"])]))
         probe.setUnlocked("s_card", true)
@@ -234,6 +276,7 @@ Item {
         console.log("unlocking the card's wallet asks which holder, and the card's PIN; the Shell asks nothing here")
         probe.unlockFor("s_card")
         check("the sheet is up", probe.sheet().visible, true)
+        check("the device alone isn't named twice: the holder row says it", probe.visibleAll("unlockWayLine").length, 0)
         check("the unlock button waits for the PIN", probe.find(view.item, "unlockButton").enabled, false)
         probe.type("stepSecretField", "123456")
         check("...and arms once typed", probe.find(view.item, "unlockButton").enabled, true)
@@ -264,13 +307,19 @@ Item {
         console.log("the QR wallet's way takes its device and the password Home; a wrong password, once")
         console.log("the device answered, is typed again without another round trip")
         probe.unlockFor("s_qr")
+        check("a way with the device and a password names the password",
+              probe.visibleAll("unlockWayLine").map(function (o) { return o.text }).join(),
+              "Unlocks with the device and the password “Home”.")
         probe.type("stepPasswordField", "hunter2")
+        check("...still named once its field is typed into", probe.visibleAll("unlockWayLine").length, 1)
         probe.click("unlockButton")
         check("the QR wallet is asked, with the password by its id", JSON.stringify(fake.last("unlockWallet")),
               JSON.stringify(["s_qr", "w_both", "qr_signer_module", "", JSON.stringify({ p_home: "hunter2" })]))
         fake.unlockJson = JSON.stringify({ handle: "smu_2", seed: "s_qr", holder: "qr_signer_module",
                                            state: "needs_password", error: "the password \"Home\" is not correct" })
         check("it says the device answered", probe.find(view.item, "unlockRetype").visible, true)
+        check("...in a sentence that starts with a capital", probe.find(view.item, "unlockRetype").text,
+              "The password \"Home\" is not correct. The device has answered: type the password again.")
         probe.type("stepPasswordField", "hunter22")
         probe.click("unlockRetry")
         check("only the password goes again", JSON.stringify(fake.last("retryUnlock")),
@@ -355,6 +404,7 @@ Item {
         var rules = probe.findAll(view.item, "walletLine_0").map(function (o) { return o.text })
         check("...and why", rules.indexOf("Held by Keycard, Keycard Shell · Always unlocked: its data here isn't protected.") >= 0, true)
         check("...with no Lock", probe.visibleAll("walletAction_lock").length, 0)
+        check("...and Lock all stays off: locking wouldn't close it", probe.find(view.item, "lockAllButton").enabled, false)
         view.item.openRule("s_card", "rule")
         check("its rule sheet starts on it", probe.visibleAll("ruleChoice")[3].checked, true)
         probe.click("ruleClose")
@@ -485,6 +535,120 @@ Item {
         check("closed without unlocking: cancelled", probe.responses[2].error, "cancelled")
     }
 
+    function pwSheet() { return probe.find(view.item, "passwordSheet") }
+    function assertAPasswordSheetClosesOnlyOnceTheBackendSaysYes() {
+        console.log("")
+        console.log("the Passwords tab's sheet waits for the backend: a failure keeps what was typed and")
+        console.log("shows why; only a success clears it and closes")
+        view.item.page = 2
+        probe.click("passwordAddTop")
+        check("the add sheet is up", probe.pwSheet().visible && probe.pwSheet().mode === "add", true)
+        probe.type("passwordAddName", "Taken")
+        probe.type("passwordAddField", "longenough")
+        probe.type("passwordAddAgain", "longenough")
+        probe.click("passwordSheetSubmit")
+        check("asked to add it", JSON.stringify(fake.last("createPassword")), JSON.stringify(["Taken", "longenough"]))
+        check("refused: the sheet stays", probe.pwSheet().visible, true)
+        check("...with what was typed", probe.find(view.item, "passwordAddName").text + " " + probe.find(view.item, "passwordAddField").text,
+              "Taken longenough")
+        check("...and the reason", probe.visibleAll("passwordSheetError").map(function (o) { return o.text }).join(),
+              "A password named “Taken” already exists.")
+        probe.type("passwordAddName", "Work")
+        probe.click("passwordSheetSubmit")
+        check("accepted: the sheet closes", probe.pwSheet().visible, false)
+        check("...and its fields are empty", probe.find(view.item, "passwordAddName").text + probe.find(view.item, "passwordAddField").text, "")
+
+        probe.click("passwordChange")
+        probe.type("passwordOld", "wrong")
+        probe.type("passwordNew", "newenough")
+        probe.type("passwordNewAgain", "newenough")
+        probe.click("passwordSheetSubmit")
+        check("a wrong current password: the sheet stays", probe.pwSheet().visible, true)
+        check("...with what was typed", probe.find(view.item, "passwordOld").text + " " + probe.find(view.item, "passwordNew").text,
+              "wrong newenough")
+        check("...and the reason", probe.visibleAll("passwordSheetError").map(function (o) { return o.text }).join(),
+              "The current password is not correct.")
+        view.item.page = 1
+        check("leaving the tab closes the sheet", probe.pwSheet().visible, false)
+        check("...and leaves nothing typed behind", probe.find(view.item, "passwordOld").text + probe.find(view.item, "passwordNew").text, "")
+
+        view.item.page = 2
+        probe.click("passwordRename")
+        probe.type("passwordRenameField", "Taken")
+        probe.click("passwordSheetSubmit")
+        check("a rename refused: the sheet stays with the name typed", probe.pwSheet().visible + " " + probe.find(view.item, "passwordRenameField").text,
+              "true Taken")
+        probe.click("passwordSheetCancel")
+        check("Cancel closes it", probe.pwSheet().visible, false)
+        fake.walletError = ""
+        view.item.page = 1
+    }
+
+    function texts(name) { return probe.visibleAll(name).map(function (o) { return o.text }).join() }
+    function assertAnErrorStaysInTheSheetThatCausedIt() {
+        console.log("")
+        console.log("one backend error, one place: a refused unlock shows in its sheet only, in words")
+        console.log("(no machine code), and is gone once the sheet closes, on the page and in other sheets")
+        view.item.page = 1
+        probe.setUnlocked("s_qr", true)
+        probe.unlockFor("s_qr")
+        probe.type("stepPasswordField", "wrongpw")
+        probe.click("unlockButton")
+        check("refused: the reason in the sheet, without its code", probe.texts("unlockError"),
+              "The password for this account is not correct")
+        check("...and not on the page behind it", probe.texts("walletError"), "")
+        probe.click("unlockClose")
+        check("closed: not on the page either", probe.texts("walletError"), "")
+        probe.unlockFor("s_qr")
+        check("reopened: the sheet starts clean", probe.texts("unlockError"), "")
+        probe.click("unlockClose")
+
+        view.item.page = 2
+        check("the Passwords tab shows nothing stale", probe.texts("passwordSheetError"), "")
+        probe.click("passwordChange")
+        check("...nor its sheet", probe.texts("passwordSheetError") + probe.texts("passwordSheetHint"), "")
+        var submit = probe.find(view.item, "passwordSheetSubmit")
+        probe.type("passwordNew", "short")
+        check("a short new password says why Change is off", probe.texts("passwordSheetHint"), "At least 8 characters.")
+        check("...and Change is off", submit.enabled, false)
+        probe.type("passwordNew", "newenough")
+        probe.type("passwordNewAgain", "newenougX")
+        check("two copies that differ say so", probe.texts("passwordSheetHint"), "The two new passwords don't match.")
+        probe.type("passwordNewAgain", "newenough")
+        check("no current password says so", probe.texts("passwordSheetHint"), "Type the current password too.")
+        probe.type("passwordOld", "oldpass")
+        check("all typed: no hint, Change is on", probe.texts("passwordSheetHint") + submit.enabled, "true")
+        shell.lose = true
+        probe.click("passwordSheetSubmit")
+        check("a call lost on the way: the sheet is usable again", submit.enabled + " " + probe.pwSheet().visible, "true true")
+        check("...and says so", probe.texts("passwordSheetError"), "The Signer did not answer. Try again.")
+        probe.click("passwordSheetCancel")
+        probe.click("passwordChange")
+        check("reopened: no error, no hint", probe.texts("passwordSheetError") + probe.texts("passwordSheetHint"), "")
+        probe.click("passwordSheetCancel")
+
+        console.log("")
+        console.log("a page action's error shows on the page, hides while a sheet is up, and stays gone after")
+        view.item.page = 1
+        probe.setUnlocked("s_card", false)
+        fake.failLock = true
+        probe.click("walletAction_lock")
+        check("Lock refused: said on the page", probe.texts("walletError"), "Could not lock.")
+        probe.unlockFor("s_qr")
+        check("...not while a sheet is up", probe.texts("walletError"), "")
+        probe.click("unlockClose")
+        check("...nor once it closes", probe.texts("walletError"), "")
+        probe.click("walletAction_lock")
+        check("the same refusal again: said again", probe.texts("walletError"), "Could not lock.")
+        view.item.page = 2
+        view.item.page = 1
+        check("gone after a tab switch", probe.texts("walletError"), "")
+        fake.failLock = false
+        probe.click("walletAction_lock")
+        probe.setUnlocked("s_card", true)
+        check("a success clears it", fake.walletError, "")
+    }
+
     Loader {
         id: view
         anchors.fill: parent
@@ -508,6 +672,8 @@ Item {
             probe.assertLockAllLocksEveryWallet()
             probe.assertTheUnlockIntentEndsOnceTheWalletUnlocks()
             probe.assertTheUnlockIntentWalksEveryLockedWallet()
+            probe.assertAPasswordSheetClosesOnlyOnceTheBackendSaysYes()
+            probe.assertAnErrorStaysInTheSheetThatCausedIt()
 
             console.log("")
             console.log(probe.failures ? "RESULT: FAILURES" : "RESULT: ALL PASS")

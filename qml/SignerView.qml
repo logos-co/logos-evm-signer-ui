@@ -3,6 +3,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import Logos.Controls
 import Logos.Theme
+import "errors.js" as Errors
 
 // The signing approval surface.
 //
@@ -47,12 +48,41 @@ Item {
     // ── wallets ─────────────────────────────────────────────────────────────
     // 0: the requests, 1: the wallets.
     property int page: 0
-    onPageChanged: if (tabs.currentIndex !== page) tabs.currentIndex = page
+    // Leaving the Passwords tab (a request or an unlock brings another tab up) closes its sheet.
+    onPageChanged: {
+        if (tabs.currentIndex !== page) tabs.currentIndex = page
+        if (page !== 2) root.pwMode = ""
+        root.walletErrorSeen = root.ready ? backend.walletError : ""
+    }
+
+    // ── one error, one place ────────────────────────────────────────────────
+    // The backend keeps a single walletError for every wallet action, and it stays set until the
+    // next action succeeds. A sheet reads it as its own call answers and shows it itself, so the
+    // page line behind it shows only what the page did: never while a sheet is up, and never an
+    // error already shown before a sheet opened or closed or the tab changed.
+    readonly property bool sheetUp: unlockSheet.visible || ruleSheet.visible || pwSheet.visible
+    property string walletErrorSeen: ""
+    onSheetUpChanged: root.walletErrorSeen = root.ready ? backend.walletError : ""
+    // An action on the page itself: its answer shows on the page, even worded as the last one.
+    function pageAction() { root.walletErrorSeen = "" }
+    readonly property string pageWalletError:
+        !ready || sheetUp || backend.walletError === walletErrorSeen ? "" : Errors.human(backend.walletError)
     // The wallet the Unlock sheet is for, and the open that brought the person there, if any.
     property string unlockSeed: ""
     property string unlockOpen: ""
     property string ruleSeed: ""
     property string ruleMode: "rule"
+    // The password sheet over the Passwords tab: "" | add | rename | change | remove, plus its target.
+    property string pwMode: ""
+    property string pwId: ""
+    property string pwName: ""
+    property int pwWallets: 0
+    function openPw(mode, id, name, wallets) {
+        root.pwId = id || ""
+        root.pwName = name || ""
+        root.pwWallets = wallets || 0
+        root.pwMode = mode
+    }
     // The `wallets.unlock` intent being serviced, ended when the wallet unlocks or the sheet closes.
     property string unlockIntent: ""
     // The wallets that intent still asks for after the one on screen, and whether one unlocked.
@@ -63,8 +93,9 @@ Item {
     }
     function openUnlock(seed, openHandle) {
         root.page = 1
-        root.unlockOpen = openHandle || ""
+        // The wallet first: the sheet starts clean for it, then shows the open it was brought for.
         root.unlockSeed = seed
+        root.unlockOpen = openHandle || ""
     }
     function closeUnlock(ok) {
         root.unlockSeed = ""
@@ -197,6 +228,9 @@ Item {
             if (next !== "") root.unlockSeed = next
             else root.closeUnlock(true)
         }
+        function onWalletErrorChanged() {
+            if (root.backend.walletError === "") root.walletErrorSeen = ""
+        }
         function onOpenSettled(handle, state) {
             if (handle === root.unlockOpen) root.closeUnlock(state === "approved")
         }
@@ -205,6 +239,13 @@ Item {
     Component.onCompleted: root.ready = root.backend !== null && logos.isViewModuleReady("evm_signer_ui")
     readonly property var queue: {
         try { return JSON.parse(backend ? backend.pendingJson : "[]") } catch (e) { return [] }
+    }
+    // Any wallet unlocked that a lock would close — gates the header's "Lock all". An always-unlocked
+    // wallet (no secret to its rule) stays open whatever is locked, so it doesn't arm the button.
+    readonly property bool anyLockable: {
+        if (!ready || backend === null) return false
+        var ws = root.parsed(backend.walletsJson, ({})).wallets || []
+        return ws.some(function (w) { return w.locked === false && !w.alwaysUnlocked })
     }
     readonly property bool showing: ready && backend.renderedHandle !== ""
     // No secret to type: an unlock covers this request, or its device asks the person itself.
@@ -330,23 +371,53 @@ Item {
 
         RowLayout {
             Layout.fillWidth: true
-            LogosText {
-                text: root.ready ? backend.statusText : "Connecting…"
-                textFormat: Text.PlainText
-                font.bold: true
+            ColumnLayout {
+                spacing: 0
+                RowLayout {
+                    spacing: Theme.spacing.tiny
+                    LogosText {
+                        text: "Signer"
+                        color: Theme.palette.text
+                        font.pixelSize: 28
+                        font.weight: Theme.typography.weightBold
+                    }
+                    LogosInfoButton {
+                        objectName: "signerInfo"
+                        title: "What the Signer does"
+                        Accessible.name: "Help: what the Signer does"
+                        text: "The Signer keeps your wallets' unlock keys, passwords and rules, and it is the only screen that shows what you are about to sign and takes your vault password. Wallets appear here once a device or key app (Keycard, Keys, a QR wallet) enrolls them; each unlocks by its own rule. Rules and passwords you set here are saved on this computer; a wallet is renamed or removed in the app that holds it."
+                    }
+                }
+                LogosText {
+                    text: "Signing requests and wallets"
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: Theme.typography.secondaryText
+                }
             }
             Item { Layout.fillWidth: true }
+            // "Connecting…" only while the backend is coming up; once ready the view self-updates
+            // (backend polls every 1s and refreshes on manager events), so no status line or Refresh.
+            LogosText {
+                Layout.alignment: Qt.AlignVCenter
+                visible: !root.ready
+                text: "Connecting…"
+                textFormat: Text.PlainText
+                color: Theme.palette.textSecondary
+                font.pixelSize: Theme.typography.secondaryText
+            }
             LogosButton {
-                text: "Refresh"
-                enabled: root.ready
-                onClicked: backend.refresh()
+                objectName: "lockAllButton"
+                text: "Lock all"
+                enabled: root.ready && root.anyLockable
+                onClicked: { root.pageAction(); root.backend.lockWallets("[]") }
             }
         }
 
         LogosText {
-            visible: root.ready && backend.lastError !== ""
+            objectName: "requestError"
+            visible: root.ready && backend.lastError !== "" && !root.sheetUp
             Layout.fillWidth: true
-            text: root.ready ? backend.lastError : ""
+            text: root.ready ? Errors.human(backend.lastError) : ""
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             color: Theme.palette.error
@@ -360,11 +431,14 @@ Item {
             onCurrentIndexChanged: root.page = currentIndex
             LogosTabButton { text: root.queue.length > 0 ? "Requests (" + root.queue.length + ")" : "Requests" }
             LogosTabButton { text: "Wallets" }
+            LogosTabButton { text: "Passwords" }
         }
 
         StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            // Breathing room between the tab bar and the tab content, as in the Keycard app.
+            Layout.topMargin: Theme.spacing.medium
             currentIndex: root.page
 
             ColumnLayout {
@@ -372,17 +446,37 @@ Item {
                 Layout.fillHeight: true
                 spacing: 12
 
+                // ── what just happened ──────────────────────────────────────────────
+                // The backend's status, only when it says something the person waits for: an
+                // approval's outcome ("Approved — 3 items signed", held past the next poll), a
+                // device at work, or the manager out of reach. The routine "Ready", "Nothing to
+                // approve" and "N waiting" are left out: the tab's count and the queue say those.
+                LogosText {
+                    objectName: "signerStatus"
+                    readonly property string status: root.ready ? (backend.statusText || "") : ""
+                    visible: status !== "" && status !== "Ready" && status !== "Nothing to approve"
+                             && !/^[0-9]+ waiting$/.test(status)
+                    Layout.fillWidth: true
+                    text: status
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    font.bold: true
+                }
+
                 // ── the queue ───────────────────────────────────────────────────────
                 LogosText {
-                    visible: !root.showing
-                    text: root.queue.length === 0
-                          ? "No signing requests are waiting."
-                          : "Select a request to review:"
+                    visible: !root.showing && root.queue.length > 0
+                    text: "Select a request to review:"
                     textFormat: Text.PlainText
+                }
+                EmptyState {
+                    visible: !root.showing && root.queue.length === 0 && root.unattended.length === 0
+                    title: "No signing requests"
+                    subtitle: "When an app asks you to sign something, it appears here for you to review and approve."
                 }
 
                 ListView {
-                    visible: !root.showing
+                    visible: !root.showing && root.queue.length > 0
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
@@ -744,9 +838,21 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 backend: root.ready ? root.backend : null
+                error: root.pageWalletError
+                onActing: root.pageAction()
                 onUnlock: function (seed, openHandle) { root.openUnlock(seed, openHandle) }
                 onRule: function (seed) { root.openRule(seed, "rule") }
                 onKeys: function (seed) { root.openRule(seed, "keys") }
+            }
+
+            PasswordsView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                backend: root.ready ? root.backend : null
+                onAddPassword: root.openPw("add", "", "", 0)
+                onRenamePassword: function (id, name) { root.openPw("rename", id, name, 0) }
+                onChangePassword: function (id, name) { root.openPw("change", id, name, 0) }
+                onRemovePassword: function (id, name, wallets) { root.openPw("remove", id, name, wallets) }
             }
         }
     }
@@ -754,7 +860,7 @@ Item {
     // ── sheets over the view ────────────────────────────────────────────────
     Rectangle {
         anchors.fill: parent
-        visible: unlockSheet.visible || ruleSheet.visible
+        visible: unlockSheet.visible || ruleSheet.visible || pwSheet.visible
         color: "#80000000"
         MouseArea { anchors.fill: parent }
     }
@@ -786,5 +892,20 @@ Item {
         seed: root.ruleSeed
         mode: root.ruleMode
         onClosed: root.ruleSeed = ""
+    }
+    PasswordSheet {
+        id: pwSheet
+        visible: root.pwMode !== ""
+        anchors.centerIn: parent
+        width: Math.min(parent.width - 32, 640)
+        height: Math.min(parent.height - 32, implicitHeight)
+        backend: root.ready ? root.backend : null
+        mode: root.pwMode
+        pwId: root.pwId
+        pwName: root.pwName
+        pwWallets: root.pwWallets
+        onClosed: root.pwMode = ""
+        // Cleared both ways: opened fresh, and nothing typed left in hidden fields once closed.
+        onVisibleChanged: reset()
     }
 }

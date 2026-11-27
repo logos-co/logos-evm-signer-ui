@@ -3,6 +3,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import Logos.Controls
 import Logos.Theme
+import "errors.js" as Errors
 
 // A wallet's rule, or new keys for it. Each rule says what it gains and what it gives up, so the
 // convenient choice is always there and never the silent default.
@@ -64,8 +65,14 @@ Rectangle {
     property int choice: 0
     // An existing password's id, or `new`.
     property string passwordId: ""
+    // What went wrong with this sheet's own change, as it answered: never the backend's live
+    // walletError, which other views share. Cleared on open, on apply and on close.
+    property string error: ""
+    property int attempt: 0
     // Start from the wallet's rule as it is.
     function reset() {
+        error = ""
+        attempt++
         inputs.clear()
         nextIndex.checked = false
         passwordId = ""
@@ -135,27 +142,38 @@ Rectangle {
     function apply() {
         var holder = inputs.holder ? inputs.holder.signer : ""
         var secret = sheet.newDeviceWay ? inputs.secret : ""
+        var be = backend
+        sheet.error = ""
+        var mine = ++sheet.attempt
+        // A refusal names why in walletError as the call answers; it is read then, and only here.
+        // What was typed is cleared once the change is made, so a refused one can be tried again.
+        var answered = function (ok) {
+            if (mine !== sheet.attempt) return
+            if (ok) inputs.clear()
+            else sheet.error = Errors.human(be.walletError) || "That did not work. Try again."
+        }
+        var lost = function () { if (mine === sheet.attempt) sheet.error = "The Signer did not answer. Try again." }
         if (mode === "keys") {
-            backend.changeKeys(seed, sheet.offersNewUnlockKey && nextIndex.checked, sheet.newDeviceWay ? holder : "", secret, inputs.passwordsJson())
-            inputs.clear()
+            logos.watch(be.changeKeys(seed, sheet.offersNewUnlockKey && nextIndex.checked, sheet.newDeviceWay ? holder : "", secret, inputs.passwordsJson()),
+                        answered, lost)
             return
         }
         var run = function (pid, typed) {
-            backend.setRule(seed, JSON.stringify(sheet.waysFor(sheet.current.key, pid)),
-                            sheet.newDeviceWay ? holder : "", secret, typed)
-            inputs.clear()
+            logos.watch(be.setRule(seed, JSON.stringify(sheet.waysFor(sheet.current.key, pid)),
+                                   sheet.newDeviceWay ? holder : "", secret, typed),
+                        answered, lost)
         }
         if (needsPassword && chosenPassword === "new") {
             var name = newName.text.trim(), pw = newPassword.text
             newPassword.text = ""
             newAgain.text = ""
-            logos.watch(backend.createPassword(name, pw), function (id) {
-                if (!id) return
+            logos.watch(be.createPassword(name, pw), function (id) {
+                if (!id) { answered(false); return }
                 var typed = {}
                 typed[id] = pw
                 run(id, JSON.stringify(typed))
                 pw = ""
-            })
+            }, lost)
             return
         }
         run(chosenPassword, inputs.passwordsJson())
@@ -177,7 +195,18 @@ Rectangle {
                   + (sheet.mode === "keys" ? "" : " unlocks")
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
-            font.bold: true
+            font.pixelSize: Theme.typography.panelTitleText
+            font.weight: Theme.typography.weightBold
+        }
+        LogosText {
+            objectName: "ruleSubtitle"
+            Layout.fillWidth: true
+            text: sheet.mode === "keys"
+                  ? "Every app that keeps data for this wallet gets a new key for it, and re-encrypts the data the next time it reads it. Do this if you think someone may have seen one of the current keys."
+                  : "Choose how this wallet unlocks. Each option says what it gains and what it gives up."
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+            color: Theme.palette.textSecondary
         }
 
         // ── the rule ───────────────────────────────────────────────────────
@@ -268,14 +297,7 @@ Rectangle {
         }
 
         // ── new keys ───────────────────────────────────────────────────────
-        LogosText {
-            visible: sheet.mode === "keys"
-            Layout.fillWidth: true
-            text: "Every app that keeps data for this wallet gets a new key for it, and re-encrypts the data "
-                  + "the next time it reads it. Do this if you think someone may have seen one of the current keys."
-            textFormat: Text.PlainText
-            wrapMode: Text.Wrap
-        }
+        // (The "what new keys does" explanation now sits under the title as the subtitle.)
         LogosCheckbox {
             id: nextIndex
             objectName: "keysNextIndex"
@@ -311,9 +333,10 @@ Rectangle {
             backend: sheet.backend
         }
         LogosText {
-            visible: !!(sheet.backend && sheet.backend.walletError)
+            objectName: "ruleError"
+            visible: sheet.error !== ""
             Layout.fillWidth: true
-            text: (sheet.backend && sheet.backend.walletError) || ""
+            text: sheet.error
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             color: Theme.palette.error
@@ -327,6 +350,8 @@ Rectangle {
                 text: sheet.working ? "Cancel" : "Close"
                 onClicked: {
                     if (sheet.working) sheet.backend.cancelUnlock()
+                    sheet.error = ""
+                    sheet.attempt++
                     inputs.clear()
                     sheet.closed()
                 }
@@ -334,6 +359,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
             LogosButton {
                 objectName: "ruleApply"
+                variant: LogosButton.Variant.Primary
                 enabled: !sheet.working && inputs.complete && (sheet.mode === "keys" || (sheet.current !== null && sheet.newPasswordReady))
                 text: sheet.mode === "keys" ? "Make new keys" : "Use this rule"
                 onClicked: sheet.apply()
